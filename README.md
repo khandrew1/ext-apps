@@ -89,6 +89,7 @@ it will guide you through the rest.
   <a href="https://block.github.io/goose/docs/tutorials/building-mcp-apps/"><img src="https://img.shields.io/badge/Goose-docs-000000?logo=goose&logoColor=white" alt="Goose"></a>
   <a href="https://learning.postman.com/docs/postman-ai/mcp-requests/interact"><img src="https://img.shields.io/badge/Postman-docs-FF6C37?logo=postman&logoColor=white" alt="Postman"></a>
   <a href="https://www.mcpjam.com/blog/mcp-apps-example"><img src="https://img.shields.io/badge/MCPJam-docs-8B5CF6" alt="MCPJam"></a>
+  <a href="https://manufact.com/inspector"><img src="https://img.shields.io/badge/mcp--use-inspector-E5F3FD" alt="mcp-use"></a>
 </p>
 
 > [!NOTE]
