@@ -158,8 +158,36 @@ import {
   ReadResourceRequest,
   ReadResourceResult,
   ResourceListChangedNotification,
+  Tool,
+  ToolAnnotations,
   ToolListChangedNotification,
 } from "@modelcontextprotocol/sdk/types.js";
+
+export type {
+  CallToolRequest,
+  CallToolResult,
+  CreateMessageRequest,
+  CreateMessageResult,
+  CreateMessageResultWithTools,
+  EmptyResult,
+  ListPromptsRequest,
+  ListPromptsResult,
+  ListResourcesRequest,
+  ListResourcesResult,
+  ListResourceTemplatesRequest,
+  ListResourceTemplatesResult,
+  ListToolsRequest,
+  ListToolsResult,
+  LoggingMessageNotification,
+  PingRequest,
+  PromptListChangedNotification,
+  ReadResourceRequest,
+  ReadResourceResult,
+  ResourceListChangedNotification,
+  Tool,
+  ToolAnnotations,
+  ToolListChangedNotification,
+};
 
 /**
  * All request types in the MCP Apps protocol.

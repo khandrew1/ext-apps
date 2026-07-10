@@ -367,7 +367,7 @@ function createLinkedPostMessagePair(): {
     postMessage(data: unknown) {
       // View → host: event.source must be the view window.
       (
-        globalThis as { window: ReturnType<typeof createFakeWindow> }
+        globalThis as unknown as { window: ReturnType<typeof createFakeWindow> }
       ).window.dispatch("message", { source: viewWindow, data });
     },
   };
@@ -375,7 +375,7 @@ function createLinkedPostMessagePair(): {
     postMessage(data: unknown) {
       // Host → view: event.source must be the host window.
       (
-        globalThis as { window: ReturnType<typeof createFakeWindow> }
+        globalThis as unknown as { window: ReturnType<typeof createFakeWindow> }
       ).window.dispatch("message", { source: hostWindow, data });
     },
   };

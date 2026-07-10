@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { InMemoryTransport } from "@modelcontextprotocol/client";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { ServerCapabilities } from "@modelcontextprotocol/sdk/types.js";
 import {
@@ -7,11 +7,8 @@ import {
   ListPromptsResultSchema,
   ListResourcesResultSchema,
   ListResourceTemplatesResultSchema,
-  PromptListChangedNotificationSchema,
   ReadResourceResultSchema,
-  ResourceListChangedNotificationSchema,
-  ToolListChangedNotificationSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+} from "@modelcontextprotocol/core";
 import { z } from "zod/v4";
 
 import { App } from "./app";
@@ -2313,9 +2310,12 @@ describe("App <-> AppBridge integration", () => {
 
     it("sendToolListChanged sends notification to app", async () => {
       const receivedNotifications: unknown[] = [];
-      app.setNotificationHandler(ToolListChangedNotificationSchema, (n) => {
-        receivedNotifications.push(n.params);
-      });
+      app.setNotificationHandler(
+        "notifications/tools/list_changed",
+        (n: { params?: unknown }) => {
+          receivedNotifications.push(n.params);
+        },
+      );
 
       await bridge.connect(bridgeTransport);
       await app.connect(appTransport);
@@ -2328,9 +2328,12 @@ describe("App <-> AppBridge integration", () => {
 
     it("sendResourceListChanged sends notification to app", async () => {
       const receivedNotifications: unknown[] = [];
-      app.setNotificationHandler(ResourceListChangedNotificationSchema, (n) => {
-        receivedNotifications.push(n.params);
-      });
+      app.setNotificationHandler(
+        "notifications/resources/list_changed",
+        (n: { params?: unknown }) => {
+          receivedNotifications.push(n.params);
+        },
+      );
 
       await bridge.connect(bridgeTransport);
       await app.connect(appTransport);
@@ -2343,9 +2346,12 @@ describe("App <-> AppBridge integration", () => {
 
     it("sendPromptListChanged sends notification to app", async () => {
       const receivedNotifications: unknown[] = [];
-      app.setNotificationHandler(PromptListChangedNotificationSchema, (n) => {
-        receivedNotifications.push(n.params);
-      });
+      app.setNotificationHandler(
+        "notifications/prompts/list_changed",
+        (n: { params?: unknown }) => {
+          receivedNotifications.push(n.params);
+        },
+      );
 
       await bridge.connect(bridgeTransport);
       await app.connect(appTransport);
@@ -2758,15 +2764,17 @@ describe("isToolVisibilityAppOnly", () => {
         testHostInfo,
         testHostCapabilities,
       );
+      const TestParams = z.object({});
+      const TestResult = z.object({});
       bridge2.setRequestHandler(
-        // @ts-expect-error — exercising throw path with raw schema
-        { shape: { method: { value: "test/method" } } },
+        "test/method",
+        { params: TestParams, result: TestResult },
         () => ({}),
       );
       expect(() => {
         bridge2.setRequestHandler(
-          // @ts-expect-error — exercising throw path with raw schema
-          { shape: { method: { value: "test/method" } } },
+          "test/method",
+          { params: TestParams, result: TestResult },
           () => ({}),
         );
       }).toThrow(/already registered/);
@@ -2777,9 +2785,11 @@ describe("isToolVisibilityAppOnly", () => {
       app2.addEventListener("toolinput", () => {});
       expect(() => {
         app2.setNotificationHandler(
-          // @ts-expect-error — exercising throw path with raw schema
+          "ui/notifications/tool-input",
           {
-            shape: { method: { value: "ui/notifications/tool-input" } },
+            params: z.object({
+              arguments: z.record(z.string(), z.unknown()).optional(),
+            }),
           },
           () => {},
         );

@@ -245,7 +245,11 @@ function AppBridge_oncreatesamplingmessage_forwardToLlm(
   //#region AppBridge_oncreatesamplingmessage_forwardToLlm
   bridge.oncreatesamplingmessage = async (params, extra) => {
     // Apply rate limiting, user approval, cost controls here
-    return await myLlmProvider.complete(params, { signal: extra.signal });
+    // Cast: host LLM helpers may still be typed against v1 SDK params during Phase 1.
+    return await myLlmProvider.complete(
+      params as CreateMessageRequest["params"],
+      { signal: extra.signal },
+    );
   };
   //#endregion AppBridge_oncreatesamplingmessage_forwardToLlm
 }
