@@ -1,12 +1,10 @@
 import {
-  JSONRPCMessage,
-  JSONRPCMessageSchema,
-  MessageExtraInfo,
-} from "@modelcontextprotocol/sdk/types.js";
-import {
-  Transport,
-  TransportSendOptions,
-} from "@modelcontextprotocol/sdk/shared/transport.js";
+  type JSONRPCMessage,
+  type MessageExtraInfo,
+  type Transport,
+  type TransportSendOptions,
+} from "@modelcontextprotocol/client";
+import { JSONRPCMessageSchema } from "@modelcontextprotocol/core";
 import { TOOL_INPUT_PARTIAL_METHOD } from "./spec.types";
 
 /**

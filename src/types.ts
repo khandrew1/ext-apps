@@ -136,8 +136,8 @@ export {
   McpUiToolMetaSchema,
 } from "./generated/schema.js";
 
-// Re-export SDK types used in protocol type unions
-import {
+// Re-export MCP protocol types used in AppRequest/AppNotification/AppResult unions
+import type {
   CallToolRequest,
   CallToolResult,
   CreateMessageRequest,
@@ -161,7 +161,7 @@ import {
   Tool,
   ToolAnnotations,
   ToolListChangedNotification,
-} from "@modelcontextprotocol/sdk/types.js";
+} from "@modelcontextprotocol/client";
 
 export type {
   CallToolRequest,

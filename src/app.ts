@@ -1455,8 +1455,8 @@ export class App extends Client {
    * }
    * ```
    *
-   * @see `CreateMessageRequest` from @modelcontextprotocol/sdk for the request type
-   * @see `CreateMessageResult` / `CreateMessageResultWithTools` from @modelcontextprotocol/sdk for result types
+   * @see `CreateMessageRequest` from @modelcontextprotocol/client for the request type
+   * @see `CreateMessageResult` / `CreateMessageResultWithTools` from @modelcontextprotocol/client for result types
    */
   async createSamplingMessage(
     params: CreateMessageRequest["params"] & { tools?: undefined },

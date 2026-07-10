@@ -1,8 +1,12 @@
 import { RESOURCE_MIME_TYPE, getToolUiResourceUri, type McpUiSandboxProxyReadyNotification, AppBridge, PostMessageTransport, type McpUiResourceCsp, type McpUiResourcePermissions, buildAllowAttribute, type McpUiUpdateModelContextRequest, type McpUiMessageRequest } from "@modelcontextprotocol/ext-apps/app-bridge";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type { CallToolResult, Resource, Tool } from "@modelcontextprotocol/sdk/types.js";
+import {
+  Client,
+  SSEClientTransport,
+  StreamableHTTPClientTransport,
+  type CallToolResult,
+  type Resource,
+  type Tool,
+} from "@modelcontextprotocol/client";
 import { getTheme, onThemeChange } from "./theme";
 import { HOST_STYLE_VARIABLES } from "./host-styles";
 
@@ -94,7 +98,7 @@ export function callTool(
   input: Record<string, unknown>,
 ): ToolCallInfo {
   log.info("Calling tool", name, "with input", input);
-  const resultPromise = serverInfo.client.callTool({ name, arguments: input }) as Promise<CallToolResult>;
+  const resultPromise = serverInfo.client.callTool({ name, arguments: input });
 
   const tool = serverInfo.tools.get(name);
   if (!tool) {

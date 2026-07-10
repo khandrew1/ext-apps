@@ -22,17 +22,24 @@
  *
  * **Problem**: ts-to-zod cannot resolve types imported from external packages.
  * When it encounters types like `ContentBlock`, `CallToolResult`, `Implementation`,
- * `RequestId`, and `Tool` from `@modelcontextprotocol/sdk`, it generates `z.any()`
- * as a placeholder.
+ * `RequestId`, and `Tool` from `@modelcontextprotocol/client`, it generates
+ * `z.any()` as a placeholder.
  *
- * **Solution**: Import the schemas from `@modelcontextprotocol/core` (v2 public
- * Zod-schema package) and remove the z.any() placeholders. Cast each imported
- * schema to `z.ZodType<V1Type>` using the still-v1 TypeScript types from
- * `@modelcontextprotocol/sdk/types.js`, so composed `z.infer` types stay
- * assignable to `spec.types.ts` until the type migration phase. Without the
- * cast, v2 inferred shapes (e.g. `Tool.inputSchema.properties` as
- * `Record<string, JSONValue>`) diverge from v1 types and break declaration
- * emit (`JSONObject` cannot be named) plus schema integration tests.
+ * **Solution**: Import the matching schemas from `@modelcontextprotocol/core`
+ * (v2 public Zod-schema package) and remove the z.any() placeholders. Cast each
+ * imported schema to `z.ZodType<T>` using the matching TypeScript types from
+ * `@modelcontextprotocol/client`. Without the cast, core's inferred shapes
+ * reference `JSONObject` (and similar) that TypeScript cannot name when emitting
+ * `.d.ts` for composed schemas (`TS4023`).
+ *
+ * TODO(sdk-v2): remove the `z.ZodType<T>` re-binding once
+ * `@modelcontextprotocol/core` exports its JSON type names
+ * (`JSONObject` / `JSONValue` / `JSONArray`) — they are declared in core's
+ * `.d.mts` but not exported, which is what makes them unnameable downstream.
+ * `@modelcontextprotocol/client` already exports the same names, so this is a
+ * small upstream fix; an issue draft is tracked in the ext-apps v2 migration
+ * notes. If upstream declines, revisit this layer's architecture (e.g. emit
+ * param-level schemas locally instead of composing core's).
  *
  *
  * ### 3. Index Signatures (`z.record().and()` → `z.object().passthrough()`)
@@ -79,8 +86,10 @@ const JSON_SCHEMA_OUTPUT_FILE = join(GENERATED_DIR, "schema.json");
 /**
  * External types from MCP that ts-to-zod can't resolve.
  * With PascalCase naming (via getSchemaName), generated placeholders match
- * `@modelcontextprotocol/core` exports. Values come from core; TypeScript
- * types still come from the v1 SDK until a later migration phase.
+ * `@modelcontextprotocol/core` exports. Schema values come from core; TypeScript
+ * types come from `@modelcontextprotocol/client` (same v2 surface as
+ * `spec.types.ts`). Schemas are cast to `z.ZodType<T>` so declaration emit
+ * does not try to name core-internal aliases like `JSONObject` (TS4023).
  */
 const EXTERNAL_TYPE_SCHEMAS = [
   { schema: "ContentBlockSchema", type: "ContentBlock" },
@@ -95,8 +104,8 @@ const EXTERNAL_TYPE_SCHEMAS = [
 /** Public Zod-schema package for MCP protocol schemas (v2). */
 const MCP_SCHEMA_PACKAGE = "@modelcontextprotocol/core";
 
-/** v1 types package — still the source of TypeScript types in spec.types.ts. */
-const MCP_V1_TYPES_PACKAGE = "@modelcontextprotocol/sdk/types.js";
+/** v2 TypeScript types package — matches imports in spec.types.ts. */
+const MCP_TYPES_PACKAGE = "@modelcontextprotocol/client";
 
 async function main() {
   console.log("🔧 Generating Zod schemas from spec.types.ts...\n");
@@ -204,9 +213,9 @@ function postProcess(content: string): string {
   // zod/v4 aligns with the SDK's own zod import — composing v3 and v4
   // schema instances throws at parse time. See header comment for details.
   //
-  // Import schemas from @modelcontextprotocol/core (runtime validation), then
-  // re-bind as z.ZodType<V1Type> so z.infer stays compatible with v1 TypeScript
-  // types still used in spec.types.ts. Full type migration is a later phase.
+  // Import schemas from @modelcontextprotocol/core, then re-bind as
+  // z.ZodType<T> with T from @modelcontextprotocol/client so .d.ts emit does
+  // not try to name core-internal aliases (JSONObject → TS4023).
   const typeImports = EXTERNAL_TYPE_SCHEMAS.map((e) => e.type).join(",\n  ");
   const schemaImports = EXTERNAL_TYPE_SCHEMAS.map(
     (e) => `${e.schema} as ${e.schema}FromCore`,
@@ -221,7 +230,7 @@ function postProcess(content: string): string {
     `import { z } from "zod/v4";
 import type {
   ${typeImports},
-} from "${MCP_V1_TYPES_PACKAGE}";
+} from "${MCP_TYPES_PACKAGE}";
 import {
   ${schemaImports},
 } from "${MCP_SCHEMA_PACKAGE}";

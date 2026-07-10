@@ -1,19 +1,13 @@
 /**
  * @file App that demonstrates a few features using MCP Apps SDK + React.
  */
-import type { App, McpUiHostContext } from "@modelcontextprotocol/ext-apps";
+import type { App, CallToolResult, McpUiHostContext } from "@modelcontextprotocol/ext-apps";
 import { useApp } from "@modelcontextprotocol/ext-apps/react";
 import { StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import styles from "./mcp-app.module.css";
 
-type ToolResult = {
-  content?: Array<{ type: string; text?: string }>;
-  structuredContent?: unknown;
-  isError?: boolean;
-};
-
-function extractTime(callToolResult: ToolResult): string {
+function extractTime(callToolResult: CallToolResult): string {
   const sc = callToolResult.structuredContent as { time?: string } | undefined;
   if (sc?.time) return sc.time;
   const { text } = callToolResult.content?.find((c) => c.type === "text") ?? {};
@@ -22,7 +16,7 @@ function extractTime(callToolResult: ToolResult): string {
 
 
 function GetTimeApp() {
-  const [toolResult, setToolResult] = useState<ToolResult | null>(null);
+  const [toolResult, setToolResult] = useState<CallToolResult | null>(null);
   const [hostContext, setHostContext] = useState<McpUiHostContext | undefined>();
 
   // `useApp` (1) creates an `App` instance, (2) calls `onAppCreated` to
@@ -71,7 +65,7 @@ function GetTimeApp() {
 
 interface GetTimeAppInnerProps {
   app: App;
-  toolResult: ToolResult | null;
+  toolResult: CallToolResult | null;
   hostContext?: McpUiHostContext;
 }
 function GetTimeAppInner({ app, toolResult, hostContext }: GetTimeAppInnerProps) {

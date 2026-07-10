@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import { InMemoryTransport } from "@modelcontextprotocol/client";
-import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import type { ServerCapabilities } from "@modelcontextprotocol/sdk/types.js";
+import type { Client, ServerCapabilities } from "@modelcontextprotocol/client";
 import {
   EmptyResultSchema,
   ListPromptsResultSchema,
@@ -31,11 +30,18 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
  */
 function createMockClient(
   serverCapabilities: ServerCapabilities = {},
-): Pick<Client, "getServerCapabilities" | "request" | "notification"> {
+): Pick<
+  Client,
+  | "getServerCapabilities"
+  | "request"
+  | "notification"
+  | "setNotificationHandler"
+> {
   return {
     getServerCapabilities: () => serverCapabilities,
     request: async () => ({}) as never,
     notification: async () => {},
+    setNotificationHandler: () => {},
   };
 }
 
