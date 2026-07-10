@@ -21,13 +21,13 @@ import {
   registerAppTool,
   RESOURCE_MIME_TYPE,
 } from "@modelcontextprotocol/ext-apps/server";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { UrlElicitationRequiredError } from "@modelcontextprotocol/sdk/types.js";
-import type {
-  CallToolResult,
-  ReadResourceResult,
-} from "@modelcontextprotocol/sdk/types.js";
+import {
+  McpServer,
+  UrlElicitationRequiredError,
+  type CallToolResult,
+  type ReadResourceResult,
+} from "@modelcontextprotocol/server";
+import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node";
 import cors from "cors";
 import express, { type Express, type Request, type Response } from "express";
 import { SignJWT, jwtVerify } from "jose";
@@ -722,7 +722,7 @@ export function createServer(authInfo?: AuthInfo, req?: Request): McpServer {
         "URL elicitation via elicitInput. Blocks until the client accepts; sends ElicitCompleteNotification before returning.",
       inputSchema: {},
     },
-    async (_args, extra): Promise<CallToolResult> => {
+    async (_args, ctx): Promise<CallToolResult> => {
       const eid = crypto.randomUUID();
       // Defer notifier creation — checks client capabilities which throws if
       // client doesn't advertise elicitation. Create lazily after elicitInput
@@ -735,7 +735,7 @@ export function createServer(authInfo?: AuthInfo, req?: Request): McpServer {
           message: "Please open this URL to continue.",
           elicitationId: eid,
         },
-        { relatedRequestId: extra.requestId, timeout: 300_000 },
+        { relatedRequestId: ctx.mcpReq.id, timeout: 300_000 },
       );
       // Send completion notification before returning — lands on the same SSE
       // stream as this tool response. For Streamable HTTP this is the ONLY
@@ -1031,7 +1031,7 @@ export function createApp(): Express {
     }
 
     const server = createServer(authInfo, req);
-    const transport = new StreamableHTTPServerTransport({
+    const transport = new NodeStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
     });
     res.on("close", () => {

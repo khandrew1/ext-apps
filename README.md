@@ -122,8 +122,14 @@ resources:
 ## Getting Started
 
 ```bash
-npm install -S @modelcontextprotocol/ext-apps
+npm install -S @modelcontextprotocol/ext-apps \
+  @modelcontextprotocol/client @modelcontextprotocol/server @modelcontextprotocol/core
 ```
+
+Peer dependencies are the MCP TypeScript SDK v2 packages
+(`@modelcontextprotocol/client`, `/server`, `/core` at `2.0.0-beta.3`). Install
+the ones your entry point needs — Views use `client` + `core`, server helpers
+use `server`, and `app-bridge` uses all three.
 
 **New here?** Start with the
 [Quickstart Guide](https://apps.extensions.modelcontextprotocol.io/api/documents/Quickstart.html)

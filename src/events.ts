@@ -32,7 +32,7 @@ import type { StandardSchemaV1 } from "@modelcontextprotocol/client";
  * Request-handler context passed to App/AppBridge `on*` request callbacks.
  *
  * Preserves the v1-era `extra.signal` surface used by hosts and examples.
- * Mapped from v2 `ctx` via {@link toRequestHandlerExtra}.
+ * Mapped internally from the v2 handler context (`ctx`).
  */
 export type RequestHandlerExtra = {
   signal: AbortSignal;

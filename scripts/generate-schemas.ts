@@ -41,7 +41,6 @@
  * notes. If upstream declines, revisit this layer's architecture (e.g. emit
  * param-level schemas locally instead of composing core's).
  *
- *
  * ### 3. Index Signatures (`z.record().and()` → `z.object().passthrough()`)
  *
  * **Problem**: TypeScript index signatures like `[key: string]: unknown` are

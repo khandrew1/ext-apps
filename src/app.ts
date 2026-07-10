@@ -228,7 +228,7 @@ export type AppToolResult<
  * validated/parsed input; when `In` is `undefined`, the callback receives only
  * `extra`. When `Out` is provided, the return's `structuredContent` is typed.
  *
- * Mirrors `ToolCallback` from `@modelcontextprotocol/sdk/server/mcp.js` but is
+ * Mirrors `ToolCallback` from `@modelcontextprotocol/server` but is
  * parameterized over {@link StandardSchemaV1} instead of zod, so any
  * Standard-Schema-compatible library (Zod, ArkType, Valibot, …) can be used.
  */
@@ -246,7 +246,7 @@ export type AppToolCallback<
 
 /**
  * Handle returned by {@link App.registerTool}. Mirrors `RegisteredTool` from
- * `@modelcontextprotocol/sdk/server/mcp.js` but stores
+ * `@modelcontextprotocol/server` but stores
  * {@link StandardSchemaV1} schemas.
  */
 export type RegisteredAppTool = {
@@ -271,9 +271,9 @@ export type RegisteredAppTool = {
 /**
  * Maps DOM-style event names to their notification `params` types.
  *
- * Used by {@link App `App`} (which composes {@link NotificationEventEmitter})
- * to provide type-safe `addEventListener` / `removeEventListener` and
- * singular `on*` handler support.
+ * Used by {@link App `App`} (which composes an internal notification event
+ * emitter) to provide type-safe `addEventListener` / `removeEventListener`
+ * and singular `on*` handler support.
  */
 export type AppEventMap = {
   toolinput: McpUiToolInputNotification["params"];
@@ -312,7 +312,7 @@ export type AppEventMap = {
  * - `addEventListener()` - Append a listener for a notification event (multi-listener)
  * - `removeEventListener()` - Remove a previously added listener
  *
- * @see {@link NotificationEventEmitter} for the DOM-model event system
+ * @see {@link AppEventMap} for the DOM-model event names and payloads
  *
  * ## Notification Setters (DOM-model `on*` handlers)
  *

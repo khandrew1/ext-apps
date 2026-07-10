@@ -7,13 +7,12 @@ import {
   applyHostStyleVariables,
   type McpUiHostContext,
 } from "@modelcontextprotocol/ext-apps";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult } from "@modelcontextprotocol/client";
 
 function extractTime(result: CallToolResult): string {
   const { text } = result.content?.find((c) => c.type === "text")!;
   return text;
 }
-
 
 const app = ref<App | null>(null);
 const hostContext = ref<McpUiHostContext | undefined>();
@@ -67,7 +66,10 @@ async function handleGetTime() {
   if (!app.value) return;
   try {
     console.info("Calling get-time tool...");
-    const result = await app.value.callServerTool({ name: "get-time", arguments: {} });
+    const result = await app.value.callServerTool({
+      name: "get-time",
+      arguments: {},
+    });
     console.info("get-time result:", result);
     serverTime.value = extractTime(result);
   } catch (e) {
@@ -108,17 +110,22 @@ async function handleOpenLink() {
 <template>
   <main
     class="main"
-    :style="hostContext?.safeAreaInsets && {
-      paddingTop: hostContext.safeAreaInsets.top + 'px',
-      paddingRight: hostContext.safeAreaInsets.right + 'px',
-      paddingBottom: hostContext.safeAreaInsets.bottom + 'px',
-      paddingLeft: hostContext.safeAreaInsets.left + 'px',
-    }"
+    :style="
+      hostContext?.safeAreaInsets && {
+        paddingTop: hostContext.safeAreaInsets.top + 'px',
+        paddingRight: hostContext.safeAreaInsets.right + 'px',
+        paddingBottom: hostContext.safeAreaInsets.bottom + 'px',
+        paddingLeft: hostContext.safeAreaInsets.left + 'px',
+      }
+    "
   >
     <p class="notice">Watch activity in the DevTools console!</p>
 
     <div class="action">
-      <p><strong>Server Time:</strong> <code class="server-time">{{ serverTime }}</code></p>
+      <p>
+        <strong>Server Time:</strong>
+        <code class="server-time">{{ serverTime }}</code>
+      </p>
       <button @click="handleGetTime">Get Server Time</button>
     </div>
 
@@ -128,12 +135,12 @@ async function handleOpenLink() {
     </div>
 
     <div class="action">
-      <input type="text" v-model="logText">
+      <input type="text" v-model="logText" />
       <button @click="handleSendLog">Send Log</button>
     </div>
 
     <div class="action">
-      <input type="url" v-model="linkUrl">
+      <input type="url" v-model="linkUrl" />
       <button @click="handleOpenLink">Open Link</button>
     </div>
   </main>
@@ -190,11 +197,16 @@ async function handleOpenLink() {
     cursor: pointer;
 
     &:hover {
-      background-color: color-mix(in srgb, var(--color-accent) 85%, var(--color-background-inverse));
+      background-color: color-mix(
+        in srgb,
+        var(--color-accent) 85%,
+        var(--color-background-inverse)
+      );
     }
 
     &:focus-visible {
-      outline: calc(var(--border-width-regular) * 2) solid var(--color-ring-primary);
+      outline: calc(var(--border-width-regular) * 2) solid
+        var(--color-ring-primary);
       outline-offset: var(--border-width-regular);
     }
   }

@@ -12,12 +12,12 @@ import { TOOL_INPUT_PARTIAL_METHOD } from "./spec.types";
  *
  * This transport enables bidirectional communication between MCP Apps running in
  * iframes and their host applications using the browser's `postMessage` API. It
- * implements the MCP TypeScript SDK `Transport` interface for both v1
- * (`@modelcontextprotocol/sdk`) and v2 (`@modelcontextprotocol/client` /
- * `@modelcontextprotocol/server`). v2-only optional members
- * ({@link hasPerRequestStream}, {@link setSupportedProtocolVersions}) and
- * extended {@link TransportSendOptions} fields are accepted but unused —
- * postMessage is a shared single channel, not a per-request HTTP stream.
+ * implements the MCP TypeScript SDK `Transport` interface from
+ * `@modelcontextprotocol/client` (also used by `@modelcontextprotocol/server`).
+ * Optional v2 members ({@link hasPerRequestStream},
+ * {@link setSupportedProtocolVersions}) and extended
+ * {@link TransportSendOptions} fields are accepted but unused — postMessage is
+ * a shared single channel, not a per-request HTTP stream.
  *
  * ## Security
  *
