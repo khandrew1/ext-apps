@@ -14,7 +14,12 @@ import { TOOL_INPUT_PARTIAL_METHOD } from "./spec.types";
  *
  * This transport enables bidirectional communication between MCP Apps running in
  * iframes and their host applications using the browser's `postMessage` API. It
- * implements the MCP SDK's `Transport` interface.
+ * implements the MCP TypeScript SDK `Transport` interface for both v1
+ * (`@modelcontextprotocol/sdk`) and v2 (`@modelcontextprotocol/client` /
+ * `@modelcontextprotocol/server`). v2-only optional members
+ * ({@link hasPerRequestStream}, {@link setSupportedProtocolVersions}) and
+ * extended {@link TransportSendOptions} fields are accepted but unused —
+ * postMessage is a shared single channel, not a per-request HTTP stream.
  *
  * ## Security
  *
@@ -121,9 +126,20 @@ export class PostMessageTransport implements Transport {
    * to all frames. The receiver should validate the message source for security.
    *
    * @param message - JSON-RPC message to send
-   * @param options - Optional send options (currently unused)
+   * @param options - Optional send options (accepted for v1/v2 SDK compatibility;
+   *   unused — postMessage has no per-request stream or HTTP headers)
    */
-  async send(message: JSONRPCMessage, options?: TransportSendOptions) {
+  async send(
+    message: JSONRPCMessage,
+    // Widen beyond v1 TransportSendOptions so callers using the v2 SDK can pass
+    // requestSignal / onRequestStreamEnd / headers without type errors. All are
+    // ignored: this transport shares one postMessage channel.
+    options?: TransportSendOptions & {
+      requestSignal?: AbortSignal;
+      onRequestStreamEnd?: () => void;
+      headers?: Readonly<Record<string, string>>;
+    },
+  ) {
     // Skip debug log for high-frequency streaming notifications — these
     // can fire dozens of times per second and flood the console.
     if ((message as { method?: string }).method !== TOOL_INPUT_PARTIAL_METHOD) {
@@ -187,4 +203,18 @@ export class PostMessageTransport implements Transport {
    * @param version - The negotiated protocol version string
    */
   setProtocolVersion?: (version: string) => void;
+
+  /**
+   * v2 SDK: `true` when the transport opens one underlying request per outbound
+   * JSON-RPC message (Streamable HTTP POST-per-request). Left unset — postMessage
+   * shares a single channel, so per-request abort/stream options are ignored.
+   */
+  readonly hasPerRequestStream?: boolean;
+
+  /**
+   * v2 SDK: sets supported protocol versions for transport-level header
+   * validation. Optional no-op hook for hosts that call it during connect;
+   * postMessage has no HTTP version headers to validate.
+   */
+  setSupportedProtocolVersions?: (versions: string[]) => void;
 }

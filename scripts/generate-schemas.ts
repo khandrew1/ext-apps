@@ -12,7 +12,7 @@
  *
  * ts-to-zod generates `import { z } from "zod"`. We rewrite this to
  * `import { z } from "zod/v4"` because the generated schemas compose with
- * schemas imported from `@modelcontextprotocol/sdk/types.js`, which the SDK
+ * schemas imported from `@modelcontextprotocol/core`, which the v2 SDK
  * constructs via `zod/v4`. Mixing schemas from the v3 and v4 APIs at runtime
  * fails with errors like `keyValidator._parse is not a function` (v3 internals
  * calling into v4 objects, or vice versa). The `zod/v4` subpath is exported by
@@ -25,7 +25,15 @@
  * `RequestId`, and `Tool` from `@modelcontextprotocol/sdk`, it generates `z.any()`
  * as a placeholder.
  *
- * **Solution**: Import the schemas from MCP SDK and remove the z.any() placeholders.
+ * **Solution**: Import the schemas from `@modelcontextprotocol/core` (v2 public
+ * Zod-schema package) and remove the z.any() placeholders. Cast each imported
+ * schema to `z.ZodType<V1Type>` using the still-v1 TypeScript types from
+ * `@modelcontextprotocol/sdk/types.js`, so composed `z.infer` types stay
+ * assignable to `spec.types.ts` until the type migration phase. Without the
+ * cast, v2 inferred shapes (e.g. `Tool.inputSchema.properties` as
+ * `Record<string, JSONValue>`) diverge from v1 types and break declaration
+ * emit (`JSONObject` cannot be named) plus schema integration tests.
+ *
  *
  * ### 3. Index Signatures (`z.record().and()` → `z.object().passthrough()`)
  *
@@ -69,18 +77,26 @@ const SCHEMA_TEST_OUTPUT_FILE = join(GENERATED_DIR, "schema.test.ts");
 const JSON_SCHEMA_OUTPUT_FILE = join(GENERATED_DIR, "schema.json");
 
 /**
- * External types from MCP SDK that ts-to-zod can't resolve.
- * With PascalCase naming (via getSchemaName), generated placeholders match MCP SDK exports.
+ * External types from MCP that ts-to-zod can't resolve.
+ * With PascalCase naming (via getSchemaName), generated placeholders match
+ * `@modelcontextprotocol/core` exports. Values come from core; TypeScript
+ * types still come from the v1 SDK until a later migration phase.
  */
 const EXTERNAL_TYPE_SCHEMAS = [
-  "ContentBlockSchema",
-  "CallToolResultSchema",
-  "EmbeddedResourceSchema",
-  "ImplementationSchema",
-  "RequestIdSchema",
-  "ResourceLinkSchema",
-  "ToolSchema",
-];
+  { schema: "ContentBlockSchema", type: "ContentBlock" },
+  { schema: "CallToolResultSchema", type: "CallToolResult" },
+  { schema: "EmbeddedResourceSchema", type: "EmbeddedResource" },
+  { schema: "ImplementationSchema", type: "Implementation" },
+  { schema: "RequestIdSchema", type: "RequestId" },
+  { schema: "ResourceLinkSchema", type: "ResourceLink" },
+  { schema: "ToolSchema", type: "Tool" },
+] as const;
+
+/** Public Zod-schema package for MCP protocol schemas (v2). */
+const MCP_SCHEMA_PACKAGE = "@modelcontextprotocol/core";
+
+/** v1 types package — still the source of TypeScript types in spec.types.ts. */
+const MCP_V1_TYPES_PACKAGE = "@modelcontextprotocol/sdk/types.js";
 
 async function main() {
   console.log("🔧 Generating Zod schemas from spec.types.ts...\n");
@@ -161,7 +177,7 @@ async function generateJsonSchema() {
     ) {
       const typeName = name.replace(/Schema$/, "");
       try {
-        // Use unrepresentable: "any" to handle external types (MCP SDK schemas)
+        // Use unrepresentable: "any" to handle external types (MCP core schemas)
         // that can't be directly represented in JSON Schema
         jsonSchema.$defs[typeName] = toJSONSchema(schema as $ZodType, {
           unrepresentable: "any",
@@ -184,20 +200,38 @@ async function generateJsonSchema() {
  * Post-process generated schemas for project compatibility.
  */
 function postProcess(content: string): string {
-  // 1. Rewrite to zod/v4 and add MCP SDK schema imports.
+  // 1. Rewrite to zod/v4 and add MCP core schema imports.
   // zod/v4 aligns with the SDK's own zod import — composing v3 and v4
   // schema instances throws at parse time. See header comment for details.
-  const mcpImports = EXTERNAL_TYPE_SCHEMAS.join(",\n  ");
+  //
+  // Import schemas from @modelcontextprotocol/core (runtime validation), then
+  // re-bind as z.ZodType<V1Type> so z.infer stays compatible with v1 TypeScript
+  // types still used in spec.types.ts. Full type migration is a later phase.
+  const typeImports = EXTERNAL_TYPE_SCHEMAS.map((e) => e.type).join(",\n  ");
+  const schemaImports = EXTERNAL_TYPE_SCHEMAS.map(
+    (e) => `${e.schema} as ${e.schema}FromCore`,
+  ).join(",\n  ");
+  const schemaBindings = EXTERNAL_TYPE_SCHEMAS.map(
+    (e) =>
+      `const ${e.schema}: z.ZodType<${e.type}> = ${e.schema}FromCore as z.ZodType<${e.type}>;`,
+  ).join("\n");
+
   content = content.replace(
     'import { z } from "zod";',
     `import { z } from "zod/v4";
+import type {
+  ${typeImports},
+} from "${MCP_V1_TYPES_PACKAGE}";
 import {
-  ${mcpImports},
-} from "@modelcontextprotocol/sdk/types.js";`,
+  ${schemaImports},
+} from "${MCP_SCHEMA_PACKAGE}";
+
+${schemaBindings}
+`,
   );
 
-  // 2. Remove z.any() placeholders for external types (now imported from MCP SDK)
-  for (const schema of EXTERNAL_TYPE_SCHEMAS) {
+  // 2. Remove z.any() placeholders for external types (now imported from MCP core)
+  for (const { schema } of EXTERNAL_TYPE_SCHEMAS) {
     content = content.replace(
       new RegExp(`(?:export )?const ${schema} = z\\.any\\(\\);\\n?`, "g"),
       "",
@@ -213,7 +247,7 @@ import {
   content = content.replace(
     "// Generated by ts-to-zod",
     `// Generated by ts-to-zod
-// Post-processed for Zod v3/v4 compatibility and MCP SDK integration
+// Post-processed for Zod v3/v4 compatibility and MCP core schema integration
 // Run: npm run generate:schemas`,
   );
 
