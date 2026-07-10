@@ -29,7 +29,11 @@ import {
 import { Server } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
-import { PostMessageTransport } from "./message-transport";
+import {
+  captureProtocolVersion,
+  createFakeWindow,
+  createLinkedPostMessagePair,
+} from "./test-transport-harness";
 
 // ---------------------------------------------------------------------------
 // Custom method schemas (vendor-prefixed; 3-arg setRequestHandler / request)
@@ -108,24 +112,6 @@ class SpikeAppServer extends Server {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-type ProtocolVersionCapture = {
-  versions: string[];
-  setProtocolVersion: (version: string) => void;
-};
-
-function captureProtocolVersion(transport: Transport): ProtocolVersionCapture {
-  const versions: string[] = [];
-  const previous = transport.setProtocolVersion?.bind(transport);
-  transport.setProtocolVersion = (version: string) => {
-    versions.push(version);
-    previous?.(version);
-  };
-  return {
-    versions,
-    setProtocolVersion: transport.setProtocolVersion,
-  };
-}
 
 /**
  * Public escape hatch: pretends this is a session resume so Client.connect
@@ -333,64 +319,6 @@ describe("v2 migration spike — Q2/Q3 no-negotiation strategy (InMemoryTranspor
 // ---------------------------------------------------------------------------
 // Same checks over PostMessageTransport (fake-window harness)
 // ---------------------------------------------------------------------------
-
-type Listener = (event: MessageEvent) => void;
-
-function createFakeWindow() {
-  const listeners = new Map<string, Set<Listener>>();
-  return {
-    addEventListener(type: string, listener: Listener) {
-      if (!listeners.has(type)) listeners.set(type, new Set());
-      listeners.get(type)!.add(listener);
-    },
-    removeEventListener(type: string, listener: Listener) {
-      listeners.get(type)?.delete(listener);
-    },
-    dispatch(type: string, event: unknown) {
-      listeners.get(type)?.forEach((l) => l(event as MessageEvent));
-    },
-  };
-}
-
-/**
- * Two PostMessageTransports sharing one fake `window`, cross-wired so each
- * side's postMessage arrives as a MessageEvent with the peer as `source`.
- */
-function createLinkedPostMessagePair(): {
-  viewTransport: PostMessageTransport;
-  hostTransport: PostMessageTransport;
-} {
-  const viewWindow = { id: "view" };
-  const hostWindow = { id: "host" };
-
-  const hostAsTarget = {
-    postMessage(data: unknown) {
-      // View → host: event.source must be the view window.
-      (
-        globalThis as unknown as { window: ReturnType<typeof createFakeWindow> }
-      ).window.dispatch("message", { source: viewWindow, data });
-    },
-  };
-  const viewAsTarget = {
-    postMessage(data: unknown) {
-      // Host → view: event.source must be the host window.
-      (
-        globalThis as unknown as { window: ReturnType<typeof createFakeWindow> }
-      ).window.dispatch("message", { source: hostWindow, data });
-    },
-  };
-
-  const viewTransport = new PostMessageTransport(
-    hostAsTarget as unknown as Window,
-    hostWindow as unknown as MessageEventSource,
-  );
-  const hostTransport = new PostMessageTransport(
-    viewAsTarget as unknown as Window,
-    viewWindow as unknown as MessageEventSource,
-  );
-
-  return { viewTransport, hostTransport };
-}
 
 describe("v2 migration spike — PostMessageTransport (fake window)", () => {
   let restoreConsole: () => void;
