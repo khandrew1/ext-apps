@@ -39,22 +39,46 @@ import type { PDFDocumentProxy } from "pdfjs-dist/types/src/display/api.js";
  * PDF Standard-14 fonts from CDN. Used by both server and viewer so we
  * declare a single well-known origin in CSP connectDomains.
  *
- * pdf.js in Node defaults to NodeStandardFontDataFactory (fs.readFile) which
- * can't fetch URLs, so we pass {@link FetchStandardFontDataFactory} alongside.
+ * pdf.js in Node defaults to NodeBinaryDataFactory (fs.readFile) which
+ * can't fetch URLs, so we pass {@link FetchBinaryDataFactory} alongside.
  * The browser viewer uses the DOM factory by default and just needs the URL.
  */
 export const STANDARD_FONT_DATA_URL = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/standard_fonts/`;
 const STANDARD_FONT_ORIGIN = "https://unpkg.com";
 
-/** pdf.js font factory that uses fetch() instead of fs.readFile. */
-class FetchStandardFontDataFactory {
-  baseUrl: string | null;
-  constructor({ baseUrl = null }: { baseUrl?: string | null }) {
-    this.baseUrl = baseUrl;
+/**
+ * pdf.js BinaryDataFactory that uses fetch() instead of fs.readFile
+ * (pdfjs-dist ≥5.7 consolidated StandardFontDataFactory into BinaryDataFactory).
+ */
+class FetchBinaryDataFactory {
+  cMapUrl: string | null;
+  standardFontDataUrl: string | null;
+  wasmUrl: string | null;
+  constructor({
+    cMapUrl = null,
+    standardFontDataUrl = null,
+    wasmUrl = null,
+  }: {
+    cMapUrl?: string | null;
+    standardFontDataUrl?: string | null;
+    wasmUrl?: string | null;
+  } = {}) {
+    this.cMapUrl = cMapUrl;
+    this.standardFontDataUrl = standardFontDataUrl;
+    this.wasmUrl = wasmUrl;
   }
-  async fetch({ filename }: { filename: string }): Promise<Uint8Array> {
-    if (!this.baseUrl) throw new Error("standardFontDataUrl not provided");
-    const url = `${this.baseUrl}${filename}`;
+  async fetch({
+    kind,
+    filename,
+  }: {
+    kind: "cMapUrl" | "standardFontDataUrl" | "wasmUrl";
+    filename: string;
+  }): Promise<Uint8Array> {
+    const baseUrl = this[kind];
+    if (!baseUrl) {
+      throw new Error(`Ensure that the \`${kind}\` API parameter is provided.`);
+    }
+    const url = `${baseUrl}${filename}`;
     const res = await globalThis.fetch(url);
     if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
     return new Uint8Array(await res.arrayBuffer());
@@ -1048,7 +1072,7 @@ async function probeFormFields(
         disableStream: true,
         rangeChunkSize: 64 * 1024,
         standardFontDataUrl: STANDARD_FONT_DATA_URL,
-        StandardFontDataFactory: FetchStandardFontDataFactory,
+        BinaryDataFactory: FetchBinaryDataFactory,
         verbosity: VerbosityLevel.ERRORS,
       }).promise,
     );
