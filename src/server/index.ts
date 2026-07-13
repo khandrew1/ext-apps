@@ -40,28 +40,53 @@ import {
   McpUiClientCapabilities,
 } from "../app.js";
 import type {
-  BaseToolCallback,
+  CallToolResult,
+  ClientCapabilities,
+  InputRequiredResult,
   McpServer,
+  ReadResourceCallback as _ReadResourceCallback,
+  ReadResourceResult,
+  RegisteredResource,
   RegisteredTool,
   ResourceMetadata,
-  ToolCallback,
-  ReadResourceCallback as _ReadResourceCallback,
-  RegisteredResource,
-} from "@modelcontextprotocol/sdk/server/mcp.js";
-import type {
-  AnySchema,
-  ZodRawShapeCompat,
-} from "@modelcontextprotocol/sdk/server/zod-compat.js";
-import type { StandardSchemaWithJSON } from "../standard-schema";
-import type {
-  ClientCapabilities,
-  ReadResourceResult,
+  ServerContext,
   ToolAnnotations,
-} from "@modelcontextprotocol/sdk/types.js";
+  ToolCallback,
+} from "@modelcontextprotocol/server";
+import type { z } from "zod";
+import type { StandardSchemaWithJSON } from "../standard-schema";
+
+/**
+ * Plain record of Zod field schemas (e.g. `{ name: z.string() }`).
+ *
+ * Matches the deprecated raw-shape form accepted by v2 `McpServer.registerTool`
+ * (auto-wrapped with `z.object()`). Not re-exported from
+ * `@modelcontextprotocol/server`, so defined locally.
+ */
+type ZodRawShape = Record<string, z.ZodType>;
+
+type InferRawShape<S extends ZodRawShape> = z.infer<z.ZodObject<S>>;
+
+type ToolHandlerResult =
+  | CallToolResult
+  | InputRequiredResult
+  | Promise<CallToolResult | InputRequiredResult>;
+
+/**
+ * Tool handler accepting either a Standard Schema `inputSchema` or a deprecated
+ * Zod raw-shape `inputSchema` (same dual form as v2 `McpServer.registerTool`).
+ */
+type AppToolCallback<
+  Args extends undefined | ZodRawShape | StandardSchemaWithJSON,
+> = Args extends StandardSchemaWithJSON
+  ? ToolCallback<Args>
+  : Args extends ZodRawShape
+    ? (args: InferRawShape<Args>, ctx: ServerContext) => ToolHandlerResult
+    : ToolCallback<undefined>;
 
 // Re-exports for convenience
 export { RESOURCE_URI_META_KEY, RESOURCE_MIME_TYPE };
-export type { ResourceMetadata, ToolCallback };
+export type { McpServer, ResourceMetadata, ToolCallback };
 
 /**
  * Base tool configuration matching the standard MCP server tool options.
@@ -70,8 +95,8 @@ export type { ResourceMetadata, ToolCallback };
 export interface ToolConfig {
   title?: string;
   description?: string;
-  inputSchema?: ZodRawShapeCompat | StandardSchemaWithJSON;
-  outputSchema?: ZodRawShapeCompat | StandardSchemaWithJSON;
+  inputSchema?: ZodRawShape | StandardSchemaWithJSON;
+  outputSchema?: ZodRawShape | StandardSchemaWithJSON;
   annotations?: ToolAnnotations;
   _meta?: Record<string, unknown>;
 }
@@ -215,8 +240,8 @@ export interface McpUiAppResourceConfig extends ResourceMetadata {
  * @see {@link registerAppResource `registerAppResource`} to register the HTML resource referenced by the tool
  */
 export function registerAppTool<
-  OutputArgs extends ZodRawShapeCompat | StandardSchemaWithJSON,
-  InputArgs extends undefined | ZodRawShapeCompat | StandardSchemaWithJSON =
+  OutputArgs extends ZodRawShape | StandardSchemaWithJSON,
+  InputArgs extends undefined | ZodRawShape | StandardSchemaWithJSON =
     undefined,
 >(
   server: Pick<McpServer, "registerTool">,
@@ -225,15 +250,7 @@ export function registerAppTool<
     inputSchema?: InputArgs;
     outputSchema?: OutputArgs;
   },
-  // The widened constraint signals the v2 API shape, but NOTE: McpServer in
-  // sdk@1.x still calls zod internals at runtime, so non-zod schemas will fail
-  // here until we depend on sdk v2. Zod (which all current callers use) is
-  // unaffected. The cast below bridges the 1.x type signature.
-  cb: ToolCallback<
-    InputArgs extends undefined | ZodRawShapeCompat | AnySchema
-      ? InputArgs
-      : AnySchema
-  >,
+  cb: AppToolCallback<InputArgs>,
 ): RegisteredTool {
   // Normalize metadata for backward compatibility:
   // - If _meta.ui.resourceUri is set, also set the legacy flat key
@@ -251,8 +268,8 @@ export function registerAppTool<
     normalizedMeta = { ...meta, ui: { ...uiMeta, resourceUri: legacyUri } };
   }
 
-  // Cast bridges the widened StandardSchemaWithJSON constraint to the
-  // sdk@1.x zod-typed signature. Drops once we depend on sdk v2.
+  // Cast bridges Standard Schema vs deprecated Zod raw-shape overloads on
+  // McpServer.registerTool (same dual form the SDK itself uses internally).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return server.registerTool(
     name,
@@ -269,7 +286,7 @@ export type McpUiReadResourceResult = ReadResourceResult & {
 };
 export type McpUiReadResourceCallback = (
   uri: URL,
-  extra: Parameters<_ReadResourceCallback>[1],
+  ctx: Parameters<_ReadResourceCallback>[1],
 ) => McpUiReadResourceResult | Promise<McpUiReadResourceResult>;
 export type ReadResourceCallback = McpUiReadResourceCallback;
 

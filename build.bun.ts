@@ -31,9 +31,15 @@ function buildJs(
   });
 }
 
-// zod is a peerDependency — keep it external so consumers share a single
-// zod instance (instanceof ZodError / schema.extend() break with duplicate copies).
-const PEER_EXTERNALS = ["@modelcontextprotocol/sdk", "zod"];
+// Peer deps stay external so consumers share a single instance (zod
+// instanceof / schema.extend() break with duplicates; MCP packages must
+// match the host's installed v2 SDK). Bundled into *-with-deps variants.
+const PEER_EXTERNALS = [
+  "@modelcontextprotocol/client",
+  "@modelcontextprotocol/core",
+  "@modelcontextprotocol/server",
+  "zod",
+];
 
 await Promise.all([
   buildJs("src/app.ts", {

@@ -115,7 +115,7 @@ Create a new MCP server with tool and resource registration. This wraps the exis
 ### Dependencies
 
 ```bash
-npm install @modelcontextprotocol/ext-apps @modelcontextprotocol/sdk zod
+npm install @modelcontextprotocol/ext-apps @modelcontextprotocol/server @modelcontextprotocol/node zod
 npm install -D tsx vite vite-plugin-singlefile
 ```
 
@@ -126,8 +126,8 @@ Use `npm install` to add dependencies rather than manually writing version numbe
 Create `server.ts`:
 
 ```typescript
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { McpServer } from "@modelcontextprotocol/server";
+import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { registerAppTool, registerAppResource, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import fs from "node:fs/promises";
 import path from "node:path";

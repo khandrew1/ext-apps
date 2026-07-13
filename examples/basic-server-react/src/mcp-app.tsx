@@ -1,17 +1,17 @@
 /**
  * @file App that demonstrates a few features using MCP Apps SDK + React.
  */
-import type { App, McpUiHostContext } from "@modelcontextprotocol/ext-apps";
+import type { App, CallToolResult, McpUiHostContext } from "@modelcontextprotocol/ext-apps";
 import { useApp } from "@modelcontextprotocol/ext-apps/react";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import styles from "./mcp-app.module.css";
 
-
 function extractTime(callToolResult: CallToolResult): string {
-  const { text } = callToolResult.content?.find((c) => c.type === "text")!;
-  return text;
+  const sc = callToolResult.structuredContent as { time?: string } | undefined;
+  if (sc?.time) return sc.time;
+  const { text } = callToolResult.content?.find((c) => c.type === "text") ?? {};
+  return text ?? "";
 }
 
 

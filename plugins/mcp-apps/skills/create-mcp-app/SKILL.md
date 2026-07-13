@@ -110,7 +110,7 @@ See `/tmp/mcp-ext-apps/docs/patterns.md` for detailed recipes:
 **Always** use `npm install` to add dependencies rather than manually writing version numbers:
 
 ```bash
-npm install @modelcontextprotocol/ext-apps @modelcontextprotocol/sdk zod express cors
+npm install @modelcontextprotocol/ext-apps @modelcontextprotocol/server @modelcontextprotocol/node @modelcontextprotocol/express zod express cors
 npm install -D typescript vite vite-plugin-singlefile concurrently cross-env @types/node @types/express @types/cors
 ```
 

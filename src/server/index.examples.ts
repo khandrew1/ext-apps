@@ -9,17 +9,14 @@
 
 import * as crypto from "node:crypto";
 import * as fs from "node:fs/promises";
-import type {
-  McpServer,
-  ToolCallback,
-  ReadResourceCallback,
-} from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer, ToolCallback } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import {
   registerAppTool,
   registerAppResource,
   getUiCapability,
   RESOURCE_MIME_TYPE,
+  type ReadResourceCallback,
 } from "./index.js";
 
 // Stubs for external functions used in examples

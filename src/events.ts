@@ -1,39 +1,12 @@
-import { Protocol } from "@modelcontextprotocol/sdk/shared/protocol.js";
-import {
-  Request,
-  Notification,
-  Result,
-} from "@modelcontextprotocol/sdk/types.js";
-import { ZodLiteral, ZodObject } from "zod/v4";
-
-type MethodSchema = ZodObject<{ method: ZodLiteral<string> }>;
-
 /**
- * Per-event state: a singular `on*` handler (replace semantics) plus a
- * listener array (`addEventListener` semantics), mirroring the DOM model
- * where `el.onclick` and `el.addEventListener("click", …)` coexist.
- */
-interface EventSlot<T = unknown> {
-  onHandler?: ((params: T) => void) | undefined;
-  listeners: ((params: T) => void)[];
-}
-
-/**
- * Intermediate base class that adds DOM-style event support on top of the
- * MCP SDK's `Protocol`.
- *
- * The base `Protocol` class stores one handler per method:
- * `setRequestHandler()` and `setNotificationHandler()` replace any existing
- * handler for the same method silently. This class introduces a two-channel
- * event model inspired by the DOM:
+ * DOM-style notification event fan-out and double-set protection for
+ * {@link App} / {@link AppBridge}, composed onto v2 Client/Server rather than
+ * subclassing Protocol.
  *
  * ### Singular `on*` handler (like `el.onclick`)
  *
- * Subclasses expose `get`/`set` pairs that delegate to
- * {@link setEventHandler `setEventHandler`} /
- * {@link getEventHandler `getEventHandler`}. Assigning replaces the previous
- * handler; assigning `undefined` clears it. `addEventListener` listeners are
- * unaffected.
+ * Assigning replaces the previous handler; assigning `undefined` clears it.
+ * `addEventListener` listeners are unaffected.
  *
  * ### Multi-listener (`addEventListener` / `removeEventListener`)
  *
@@ -42,55 +15,138 @@ interface EventSlot<T = unknown> {
  *
  * ### Dispatch order
  *
- * When a notification arrives for a mapped event:
- * 1. {@link onEventDispatch `onEventDispatch`} (subclass side-effects)
+ * 1. Optional `onDispatch` side-effects (e.g. merge host context)
  * 2. The singular `on*` handler (if set)
  * 3. All `addEventListener` listeners in insertion order
  *
  * ### Double-set protection
  *
- * Direct calls to {@link setRequestHandler `setRequestHandler`} /
- * {@link setNotificationHandler `setNotificationHandler`} throw if a handler
- * for the same method has already been registered (through any path), so
- * accidental overwrites surface as errors instead of silent bugs.
- *
- * @typeParam EventMap - Maps event names to the listener's `params` type.
+ * {@link MethodClaimRegistry} tracks methods claimed by event registration or
+ * internal handlers. App/AppBridge shadow `setRequestHandler` /
+ * `setNotificationHandler` to throw when the same method is claimed twice.
  */
-export abstract class ProtocolWithEvents<
-  SendRequestT extends Request,
-  SendNotificationT extends Notification,
-  SendResultT extends Result,
-  EventMap extends Record<string, unknown>,
-> extends Protocol<SendRequestT, SendNotificationT, SendResultT> {
-  private _registeredMethods = new Set<string>();
-  private _eventSlots = new Map<keyof EventMap, EventSlot>();
 
-  /**
-   * Event name → notification schema. Subclasses populate this so that
-   * the event system can lazily register a dispatcher with the correct
-   * schema on first use.
-   */
-  protected abstract readonly eventSchemas: {
-    [K in keyof EventMap]: MethodSchema;
+import type { StandardSchemaV1 } from "@modelcontextprotocol/client";
+
+/**
+ * Request-handler context passed to App/AppBridge `on*` request callbacks.
+ *
+ * Preserves the v1-era `extra.signal` surface used by hosts and examples.
+ * Mapped internally from the v2 handler context (`ctx`).
+ */
+export type RequestHandlerExtra = {
+  signal: AbortSignal;
+  sessionId?: string;
+};
+
+/**
+ * Adapt v2 handler context to the public `extra` shape.
+ */
+export function toRequestHandlerExtra(ctx: {
+  sessionId?: string;
+  mcpReq: { signal: AbortSignal };
+}): RequestHandlerExtra {
+  return {
+    signal: ctx.mcpReq.signal,
+    sessionId: ctx.sessionId,
   };
+}
 
-  /**
-   * Called once per incoming notification, before any handlers or listeners
-   * fire. Subclasses may override to perform side effects such as merging
-   * notification params into cached state.
-   */
-  protected onEventDispatch<K extends keyof EventMap>(
-    _event: K,
-    _params: EventMap[K],
-  ): void {}
+/**
+ * Deep-merge capability objects (replaces v1 `mergeCapabilities`).
+ */
+export function mergeCapabilities<T extends object>(base: T, additional: T): T {
+  const result = { ...(base as Record<string, unknown>) };
+  for (const [key, value] of Object.entries(additional)) {
+    const existing = result[key];
+    if (
+      existing &&
+      typeof existing === "object" &&
+      !Array.isArray(existing) &&
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+    ) {
+      result[key] = mergeCapabilities(
+        existing as Record<string, unknown>,
+        value as Record<string, unknown>,
+      );
+    } else {
+      result[key] = value;
+    }
+  }
+  return result as T;
+}
 
-  // ── Event system (DOM model) ────────────────────────────────────────
+/**
+ * Tracks JSON-RPC methods claimed by event registration or internal handlers
+ * so accidental double-registration via `setRequestHandler` /
+ * `setNotificationHandler` throws instead of silently replacing.
+ */
+export class MethodClaimRegistry {
+  private readonly _methods = new Set<string>();
 
-  /**
-   * Lazily create the event slot and register a single dispatcher with the
-   * base `Protocol`. The dispatcher fans out to the `on*` handler and all
-   * `addEventListener` listeners.
-   */
+  /** Record a claim without throwing (replace / first-register paths). */
+  claim(method: string): void {
+    this._methods.add(method);
+  }
+
+  /** Throw if already claimed, then claim. */
+  assertAndClaim(method: string, via: string): void {
+    if (this._methods.has(method)) {
+      throw new Error(
+        `Handler for "${method}" already registered (via ${via}). ` +
+          `Use addEventListener() to attach multiple listeners, ` +
+          `or the on* setter for replace semantics.`,
+      );
+    }
+    this._methods.add(method);
+  }
+
+  has(method: string): boolean {
+    return this._methods.has(method);
+  }
+}
+
+interface EventSlot<T = unknown> {
+  onHandler?: ((params: T) => void) | undefined;
+  listeners: ((params: T) => void)[];
+}
+
+export type EventMethodSchema = {
+  method: string;
+  params: StandardSchemaV1;
+};
+
+/**
+ * Registers one v2 notification handler per event method and fans out to
+ * `on*` + `addEventListener` listeners.
+ */
+export class NotificationEventEmitter<
+  EventMap extends Record<string, unknown>,
+> {
+  private readonly _eventSlots = new Map<keyof EventMap, EventSlot>();
+
+  constructor(
+    private readonly _eventSchemas: {
+      [K in keyof EventMap]: EventMethodSchema;
+    },
+    /**
+     * Called once per event on first use. Must register a v2
+     * `setNotificationHandler(method, { params }, handler)` and claim the
+     * method in the caller's {@link MethodClaimRegistry}.
+     */
+    private readonly _registerDispatcher: (
+      method: string,
+      paramsSchema: StandardSchemaV1,
+      dispatch: (params: unknown) => void,
+    ) => void,
+    private readonly _onDispatch?: <K extends keyof EventMap>(
+      event: K,
+      params: EventMap[K],
+    ) => void,
+  ) {}
+
   private _ensureEventSlot<K extends keyof EventMap>(
     event: K,
   ): EventSlot<EventMap[K]> {
@@ -98,39 +154,25 @@ export abstract class ProtocolWithEvents<
       | EventSlot<EventMap[K]>
       | undefined;
     if (!slot) {
-      const schema = this.eventSchemas[event];
+      const schema = this._eventSchemas[event];
       if (!schema) {
         throw new Error(`Unknown event: ${String(event)}`);
       }
       slot = { listeners: [] };
       this._eventSlots.set(event, slot as EventSlot);
 
-      // Claim this method so direct setNotificationHandler calls throw.
-      const method = schema.shape.method.value;
-      this._registeredMethods.add(method);
-
-      const s = slot; // stable reference for the closure
-      super.setNotificationHandler(schema, (n) => {
-        const params = (n as { params: EventMap[K] }).params;
-        this.onEventDispatch(event, params);
-        // 1. Singular on* handler
-        s.onHandler?.(params);
-        // 2. addEventListener listeners — snapshot to tolerate removal during
-        //    dispatch (e.g., a listener that calls removeEventListener on itself)
-        for (const l of [...s.listeners]) l(params);
+      const s = slot;
+      this._registerDispatcher(schema.method, schema.params, (params) => {
+        const p = params as EventMap[K];
+        this._onDispatch?.(event, p);
+        s.onHandler?.(p);
+        for (const l of [...s.listeners]) l(p);
       });
     }
     return slot;
   }
 
-  /**
-   * Set or clear the singular `on*` handler for an event.
-   *
-   * Replace semantics — like the DOM's `el.onclick = fn`. Assigning
-   * `undefined` clears the handler without affecting `addEventListener`
-   * listeners.
-   */
-  protected setEventHandler<K extends keyof EventMap>(
+  setEventHandler<K extends keyof EventMap>(
     event: K,
     handler: ((params: EventMap[K]) => void) | undefined,
   ): void {
@@ -144,31 +186,13 @@ export abstract class ProtocolWithEvents<
     slot.onHandler = handler;
   }
 
-  /**
-   * Get the singular `on*` handler for an event, or `undefined` if none is
-   * set. `addEventListener` listeners are not reflected here.
-   */
-  protected getEventHandler<K extends keyof EventMap>(
+  getEventHandler<K extends keyof EventMap>(
     event: K,
   ): ((params: EventMap[K]) => void) | undefined {
     return (this._eventSlots.get(event) as EventSlot<EventMap[K]> | undefined)
       ?.onHandler;
   }
 
-  /**
-   * Add a listener for a notification event.
-   *
-   * Unlike the singular `on*` handler, calling this multiple times appends
-   * listeners rather than replacing them. All registered listeners fire in
-   * insertion order after the `on*` handler when the notification arrives.
-   *
-   * Registration is lazy: the first call (for a given event, from either
-   * this method or the `on*` setter) registers a dispatcher with the base
-   * `Protocol`.
-   *
-   * @param event - Event name (a key of the `EventMap` type parameter).
-   * @param handler - Listener invoked with the notification `params`.
-   */
   addEventListener<K extends keyof EventMap>(
     event: K,
     handler: (params: EventMap[K]) => void,
@@ -176,11 +200,6 @@ export abstract class ProtocolWithEvents<
     this._ensureEventSlot(event).listeners.push(handler);
   }
 
-  /**
-   * Remove a previously registered event listener. The dispatcher stays
-   * registered even if the listener array becomes empty; future
-   * notifications simply have no listeners to call.
-   */
   removeEventListener<K extends keyof EventMap>(
     event: K,
     handler: (params: EventMap[K]) => void,
@@ -192,88 +211,44 @@ export abstract class ProtocolWithEvents<
     const idx = slot.listeners.indexOf(handler);
     if (idx !== -1) slot.listeners.splice(idx, 1);
   }
+}
 
-  // ── Handler registration with double-set protection ─────────────────
-
-  // The two overrides below are arrow-function class fields rather than
-  // prototype methods so that Protocol's constructor — which registers its
-  // own ping/cancelled/progress handlers via `this.setRequestHandler`
-  // before our fields initialize — hits the base implementation and skips
-  // tracking. Converting these to proper methods would crash with
-  // `_registeredMethods` undefined during super().
-
-  /**
-   * Registers a request handler. Throws if a handler for the same method
-   * has already been registered — use the `on*` setter (replace semantics)
-   * or `addEventListener` (multi-listener) for notification events.
-   *
-   * @throws {Error} if a handler for this method is already registered.
-   */
-  override setRequestHandler: Protocol<
-    SendRequestT,
-    SendNotificationT,
-    SendResultT
-  >["setRequestHandler"] = (schema, handler) => {
-    this._assertMethodNotRegistered(schema, "setRequestHandler");
-    super.setRequestHandler(schema, handler);
-  };
-
-  /**
-   * Registers a notification handler. Throws if a handler for the same
-   * method has already been registered — use the `on*` setter (replace
-   * semantics) or `addEventListener` (multi-listener) for mapped events.
-   *
-   * @throws {Error} if a handler for this method is already registered.
-   */
-  override setNotificationHandler: Protocol<
-    SendRequestT,
-    SendNotificationT,
-    SendResultT
-  >["setNotificationHandler"] = (schema, handler) => {
-    this._assertMethodNotRegistered(schema, "setNotificationHandler");
-    super.setNotificationHandler(schema, handler);
-  };
-
-  /**
-   * Warn if a request handler `on*` setter is replacing a previously-set
-   * handler. Call from each request setter before updating the backing field.
-   */
-  protected warnIfRequestHandlerReplaced(
-    name: string,
-    previous: unknown,
-    next: unknown,
-  ): void {
-    if (previous && next) {
-      console.warn(
-        `[MCP Apps] ${name} handler replaced. ` +
-          `Previous handler will no longer be called.`,
-      );
-    }
+/**
+ * Warn if a request-handler `on*` setter is replacing a previously-set
+ * handler. Call from each request setter before updating the backing field.
+ */
+export function warnIfRequestHandlerReplaced(
+  name: string,
+  previous: unknown,
+  next: unknown,
+): void {
+  if (previous && next) {
+    console.warn(
+      `[MCP Apps] ${name} handler replaced. ` +
+        `Previous handler will no longer be called.`,
+    );
   }
+}
 
-  /**
-   * Replace a request handler, bypassing double-set protection. Used by
-   * `on*` request-handler setters that need replace semantics.
-   */
-  protected replaceRequestHandler: Protocol<
-    SendRequestT,
-    SendNotificationT,
-    SendResultT
-  >["setRequestHandler"] = (schema, handler) => {
-    const method = (schema as MethodSchema).shape.method.value;
-    this._registeredMethods.add(method);
-    super.setRequestHandler(schema, handler);
-  };
+/**
+ * Extract the `params` Zod schema from a generated `{ method, params }` schema.
+ */
+export function paramsSchemaOf<
+  S extends { shape: { params: StandardSchemaV1 } },
+>(schema: S): S["shape"]["params"] {
+  return schema.shape.params;
+}
 
-  private _assertMethodNotRegistered(schema: unknown, via: string): void {
-    const method = (schema as MethodSchema).shape.method.value;
-    if (this._registeredMethods.has(method)) {
-      throw new Error(
-        `Handler for "${method}" already registered (via ${via}). ` +
-          `Use addEventListener() to attach multiple listeners, ` +
-          `or the on* setter for replace semantics.`,
-      );
-    }
-    this._registeredMethods.add(method);
+/**
+ * Extract the literal method string from a generated `{ method, params }` schema.
+ */
+export function methodOf<
+  S extends { shape: { method: { value?: string; values?: Set<string> } } },
+>(schema: S): string {
+  const method = schema.shape.method;
+  if (typeof method.value === "string") return method.value;
+  if (method.values && method.values.size > 0) {
+    return method.values.values().next().value as string;
   }
+  throw new Error("Could not extract method literal from schema");
 }

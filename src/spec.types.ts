@@ -18,7 +18,7 @@ import type {
   RequestId,
   ResourceLink,
   Tool,
-} from "@modelcontextprotocol/sdk/types.js";
+} from "@modelcontextprotocol/client";
 
 /**
  * Current protocol version supported by this SDK.

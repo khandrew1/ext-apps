@@ -3,11 +3,11 @@ import {
   registerAppTool,
   RESOURCE_MIME_TYPE,
 } from "@modelcontextprotocol/ext-apps/server";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import type {
   CallToolResult,
   ReadResourceResult,
-} from "@modelcontextprotocol/sdk/types.js";
+} from "@modelcontextprotocol/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
@@ -72,7 +72,7 @@ export function createServer(): McpServer {
   );
 
   // Sample downloadable resource — used to demo ResourceLink in ui/download-file
-  server.resource(
+  server.registerResource(
     SAMPLE_DOWNLOAD_URI,
     SAMPLE_DOWNLOAD_URI,
     {

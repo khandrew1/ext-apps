@@ -136,8 +136,8 @@ export {
   McpUiToolMetaSchema,
 } from "./generated/schema.js";
 
-// Re-export SDK types used in protocol type unions
-import {
+// Re-export MCP protocol types used in AppRequest/AppNotification/AppResult unions
+import type {
   CallToolRequest,
   CallToolResult,
   CreateMessageRequest,
@@ -158,8 +158,36 @@ import {
   ReadResourceRequest,
   ReadResourceResult,
   ResourceListChangedNotification,
+  Tool,
+  ToolAnnotations,
   ToolListChangedNotification,
-} from "@modelcontextprotocol/sdk/types.js";
+} from "@modelcontextprotocol/client";
+
+export type {
+  CallToolRequest,
+  CallToolResult,
+  CreateMessageRequest,
+  CreateMessageResult,
+  CreateMessageResultWithTools,
+  EmptyResult,
+  ListPromptsRequest,
+  ListPromptsResult,
+  ListResourcesRequest,
+  ListResourcesResult,
+  ListResourceTemplatesRequest,
+  ListResourceTemplatesResult,
+  ListToolsRequest,
+  ListToolsResult,
+  LoggingMessageNotification,
+  PingRequest,
+  PromptListChangedNotification,
+  ReadResourceRequest,
+  ReadResourceResult,
+  ResourceListChangedNotification,
+  Tool,
+  ToolAnnotations,
+  ToolListChangedNotification,
+};
 
 /**
  * All request types in the MCP Apps protocol.

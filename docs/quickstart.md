@@ -37,7 +37,7 @@ Install the dependencies you'll need:
 
 ```bash
 npm init -y
-npm install @modelcontextprotocol/ext-apps @modelcontextprotocol/sdk express cors
+npm install @modelcontextprotocol/ext-apps @modelcontextprotocol/server @modelcontextprotocol/node @modelcontextprotocol/express express cors
 npm install -D typescript vite vite-plugin-singlefile @types/express @types/cors @types/node tsx concurrently cross-env
 ```
 
@@ -178,7 +178,7 @@ import {
   registerAppTool,
   RESOURCE_MIME_TYPE,
 } from "@modelcontextprotocol/ext-apps/server";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -240,10 +240,10 @@ export function createServer(): McpServer {
 
 <!-- prettier-ignore -->
 ```ts source="../examples/quickstart/main.ts"
-import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createMcpExpressApp } from "@modelcontextprotocol/express";
+import type { McpServer } from "@modelcontextprotocol/server";
+import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
+import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node";
 import cors from "cors";
 import type { Request, Response } from "express";
 import { createServer } from "./server.js";
@@ -263,7 +263,7 @@ export async function startStreamableHTTPServer(
 
   app.all("/mcp", async (req: Request, res: Response) => {
     const server = createServer();
-    const transport = new StreamableHTTPServerTransport({
+    const transport = new NodeStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
     });
 

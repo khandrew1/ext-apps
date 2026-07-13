@@ -12,7 +12,7 @@
  *
  * ts-to-zod generates `import { z } from "zod"`. We rewrite this to
  * `import { z } from "zod/v4"` because the generated schemas compose with
- * schemas imported from `@modelcontextprotocol/sdk/types.js`, which the SDK
+ * schemas imported from `@modelcontextprotocol/core`, which the v2 SDK
  * constructs via `zod/v4`. Mixing schemas from the v3 and v4 APIs at runtime
  * fails with errors like `keyValidator._parse is not a function` (v3 internals
  * calling into v4 objects, or vice versa). The `zod/v4` subpath is exported by
@@ -22,10 +22,24 @@
  *
  * **Problem**: ts-to-zod cannot resolve types imported from external packages.
  * When it encounters types like `ContentBlock`, `CallToolResult`, `Implementation`,
- * `RequestId`, and `Tool` from `@modelcontextprotocol/sdk`, it generates `z.any()`
- * as a placeholder.
+ * `RequestId`, and `Tool` from `@modelcontextprotocol/client`, it generates
+ * `z.any()` as a placeholder.
  *
- * **Solution**: Import the schemas from MCP SDK and remove the z.any() placeholders.
+ * **Solution**: Import the matching schemas from `@modelcontextprotocol/core`
+ * (v2 public Zod-schema package) and remove the z.any() placeholders. Cast each
+ * imported schema to `z.ZodType<T>` using the matching TypeScript types from
+ * `@modelcontextprotocol/client`. Without the cast, core's inferred shapes
+ * reference `JSONObject` (and similar) that TypeScript cannot name when emitting
+ * `.d.ts` for composed schemas (`TS4023`).
+ *
+ * TODO(sdk-v2): remove the `z.ZodType<T>` re-binding once
+ * `@modelcontextprotocol/core` exports its JSON type names
+ * (`JSONObject` / `JSONValue` / `JSONArray`) — they are declared in core's
+ * `.d.mts` but not exported, which is what makes them unnameable downstream.
+ * `@modelcontextprotocol/client` already exports the same names, so this is a
+ * small upstream fix; an issue draft is tracked in the ext-apps v2 migration
+ * notes. If upstream declines, revisit this layer's architecture (e.g. emit
+ * param-level schemas locally instead of composing core's).
  *
  * ### 3. Index Signatures (`z.record().and()` → `z.object().passthrough()`)
  *
@@ -69,18 +83,28 @@ const SCHEMA_TEST_OUTPUT_FILE = join(GENERATED_DIR, "schema.test.ts");
 const JSON_SCHEMA_OUTPUT_FILE = join(GENERATED_DIR, "schema.json");
 
 /**
- * External types from MCP SDK that ts-to-zod can't resolve.
- * With PascalCase naming (via getSchemaName), generated placeholders match MCP SDK exports.
+ * External types from MCP that ts-to-zod can't resolve.
+ * With PascalCase naming (via getSchemaName), generated placeholders match
+ * `@modelcontextprotocol/core` exports. Schema values come from core; TypeScript
+ * types come from `@modelcontextprotocol/client` (same v2 surface as
+ * `spec.types.ts`). Schemas are cast to `z.ZodType<T>` so declaration emit
+ * does not try to name core-internal aliases like `JSONObject` (TS4023).
  */
 const EXTERNAL_TYPE_SCHEMAS = [
-  "ContentBlockSchema",
-  "CallToolResultSchema",
-  "EmbeddedResourceSchema",
-  "ImplementationSchema",
-  "RequestIdSchema",
-  "ResourceLinkSchema",
-  "ToolSchema",
-];
+  { schema: "ContentBlockSchema", type: "ContentBlock" },
+  { schema: "CallToolResultSchema", type: "CallToolResult" },
+  { schema: "EmbeddedResourceSchema", type: "EmbeddedResource" },
+  { schema: "ImplementationSchema", type: "Implementation" },
+  { schema: "RequestIdSchema", type: "RequestId" },
+  { schema: "ResourceLinkSchema", type: "ResourceLink" },
+  { schema: "ToolSchema", type: "Tool" },
+] as const;
+
+/** Public Zod-schema package for MCP protocol schemas (v2). */
+const MCP_SCHEMA_PACKAGE = "@modelcontextprotocol/core";
+
+/** v2 TypeScript types package — matches imports in spec.types.ts. */
+const MCP_TYPES_PACKAGE = "@modelcontextprotocol/client";
 
 async function main() {
   console.log("🔧 Generating Zod schemas from spec.types.ts...\n");
@@ -161,7 +185,7 @@ async function generateJsonSchema() {
     ) {
       const typeName = name.replace(/Schema$/, "");
       try {
-        // Use unrepresentable: "any" to handle external types (MCP SDK schemas)
+        // Use unrepresentable: "any" to handle external types (MCP core schemas)
         // that can't be directly represented in JSON Schema
         jsonSchema.$defs[typeName] = toJSONSchema(schema as $ZodType, {
           unrepresentable: "any",
@@ -184,20 +208,38 @@ async function generateJsonSchema() {
  * Post-process generated schemas for project compatibility.
  */
 function postProcess(content: string): string {
-  // 1. Rewrite to zod/v4 and add MCP SDK schema imports.
+  // 1. Rewrite to zod/v4 and add MCP core schema imports.
   // zod/v4 aligns with the SDK's own zod import — composing v3 and v4
   // schema instances throws at parse time. See header comment for details.
-  const mcpImports = EXTERNAL_TYPE_SCHEMAS.join(",\n  ");
+  //
+  // Import schemas from @modelcontextprotocol/core, then re-bind as
+  // z.ZodType<T> with T from @modelcontextprotocol/client so .d.ts emit does
+  // not try to name core-internal aliases (JSONObject → TS4023).
+  const typeImports = EXTERNAL_TYPE_SCHEMAS.map((e) => e.type).join(",\n  ");
+  const schemaImports = EXTERNAL_TYPE_SCHEMAS.map(
+    (e) => `${e.schema} as ${e.schema}FromCore`,
+  ).join(",\n  ");
+  const schemaBindings = EXTERNAL_TYPE_SCHEMAS.map(
+    (e) =>
+      `const ${e.schema}: z.ZodType<${e.type}> = ${e.schema}FromCore as z.ZodType<${e.type}>;`,
+  ).join("\n");
+
   content = content.replace(
     'import { z } from "zod";',
     `import { z } from "zod/v4";
+import type {
+  ${typeImports},
+} from "${MCP_TYPES_PACKAGE}";
 import {
-  ${mcpImports},
-} from "@modelcontextprotocol/sdk/types.js";`,
+  ${schemaImports},
+} from "${MCP_SCHEMA_PACKAGE}";
+
+${schemaBindings}
+`,
   );
 
-  // 2. Remove z.any() placeholders for external types (now imported from MCP SDK)
-  for (const schema of EXTERNAL_TYPE_SCHEMAS) {
+  // 2. Remove z.any() placeholders for external types (now imported from MCP core)
+  for (const { schema } of EXTERNAL_TYPE_SCHEMAS) {
     content = content.replace(
       new RegExp(`(?:export )?const ${schema} = z\\.any\\(\\);\\n?`, "g"),
       "",
@@ -213,7 +255,7 @@ import {
   content = content.replace(
     "// Generated by ts-to-zod",
     `// Generated by ts-to-zod
-// Post-processed for Zod v3/v4 compatibility and MCP SDK integration
+// Post-processed for Zod v3/v4 compatibility and MCP core schema integration
 // Run: npm run generate:schemas`,
   );
 

@@ -11,8 +11,8 @@
     "dev": "cross-env NODE_ENV=development concurrently \"npm run watch\" \"npm run serve\""
   },
   "dependencies": {
+    "@modelcontextprotocol/client": "2.0.0-beta.3",
     "@modelcontextprotocol/ext-apps": "^1.7.0",
-    "@modelcontextprotocol/sdk": "^1.29.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "zod": "^4.1.13"

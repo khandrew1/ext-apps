@@ -1,8 +1,8 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import type {
   CallToolResult,
   ReadResourceResult,
-} from "@modelcontextprotocol/sdk/types.js";
+} from "@modelcontextprotocol/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
@@ -100,7 +100,7 @@ export function createServer(): McpServer {
         title: "Get Customer Data",
         description:
           "Returns customer data with segment information for visualization. Optionally filter by segment.",
-        inputSchema: GetCustomerDataInputSchema.shape,
+        inputSchema: GetCustomerDataInputSchema,
         outputSchema: GetCustomerDataOutputSchema.shape,
         _meta: { ui: { resourceUri } },
       },
