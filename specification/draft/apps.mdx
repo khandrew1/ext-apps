@@ -10,7 +10,7 @@
 
 ## Abstract
 
-This SEP proposes an extension (per SEP-1724) to MCP that enables servers to deliver interactive user interfaces to hosts. MCP Apps introduces a standardized pattern for declaring UI resources via the `ui://` URI scheme, associating them with tools through metadata, and facilitating bidirectional communication between the UI and the host using MCP's JSON-RPC base protocol. This extension addresses the growing community need for rich, interactive experiences in MCP-enabled applications, maintaining security, auditability, and alignment with MCP's core architecture. The initial specification focuses on HTML resources (`text/html;profile=mcp-app`) with a clear path for future extensions.
+This SEP proposes an extension (per [SEP-2133](https://modelcontextprotocol.io/seps/2133-extensions)) to MCP that enables servers to deliver interactive user interfaces to hosts. MCP Apps introduces a standardized pattern for declaring UI resources via the `ui://` URI scheme, associating them with tools through metadata, and facilitating bidirectional communication between the UI and the host using MCP's JSON-RPC base protocol. This extension addresses the growing community need for rich, interactive experiences in MCP-enabled applications, maintaining security, auditability, and alignment with MCP's core architecture. The initial specification focuses on HTML resources (`text/html;profile=mcp-app`) with a clear path for future extensions.
 
 ## Motivation
 
@@ -428,7 +428,7 @@ Example (app-only tool, hidden from model):
 
 ### Communication Protocol
 
-MCP Apps uses JSON-RPC 2.0 over `postMessage` for iframe-host communication. UI capabilities (e.g., tool call, prompt, etc.) will reuse MCP’s existing protocol. In the future, we may choose to enrich the communication protocol with additional MCP capabilities.
+MCP Apps uses JSON-RPC 2.0 over `postMessage` for iframe-host communication. UI capabilities (e.g., tool call, prompt, etc.) reuse MCP’s existing protocol, including its standard initialization lifecycle for identity and capability negotiation.
 
 ### Transport Layer
 
@@ -477,7 +477,11 @@ function onNotification(method: string, handler: (params: any) => void) {
 
 
 const initializeResult = await sendRequest("initialize", {
-  capabilities: {},
+  capabilities: {
+    extensions: {
+      "io.modelcontextprotocol/ui": {},
+    },
+  },
   clientInfo: {name: "My UI", version: "1.0.0"},
   protocolVersion: "2025-06-18",
 });
@@ -500,7 +504,7 @@ If the Host is a web page, it MUST wrap the View and communicate with it through
    - Block dangerous features (`object-src 'none'`)
    - Apply restrictive defaults if no CSP metadata is provided
    - If `permissions` is declared, the Sandbox MAY set the inner iframe's `allow` attribute accordingly
-6. The Sandbox MUST forward messages sent by the Host to the View, and vice versa, for any method that doesn't start with `ui/notifications/sandbox-`. This includes lifecycle messages, e.g., `ui/initialize` request & `ui/notifications/initialized` notification both sent by the View. The Host MUST NOT send any request or notification to the View before it receives an `initialized` notification.
+6. The Sandbox MUST forward messages sent by the Host to the View, and vice versa, for any method that doesn't start with `ui/notifications/sandbox-`. This includes core MCP lifecycle messages and the `ui/notifications/initialized` readiness notification sent by the View. The Host MUST NOT send any request or notification to the View before it receives `ui/notifications/initialized`.
 7. The Sandbox SHOULD NOT create/send any requests to the Host or to the View (this would require synthesizing new request ids).
 8. The Host MAY forward any message from the View (coming via the Sandbox) to the MCP Apps server, for any method that doesn't start with `ui/`. While the Host SHOULD ensure the View's MCP connection is spec-compliant, it MAY decide to block some messages or subject them to further user approval.
 
@@ -530,7 +534,7 @@ Note that `tools/call` and `tools/list` flow **bidirectionally**:
 
 **Sampling:**
 
-- `sampling/createMessage` - Request an LLM completion from the host (uses the standard MCP [`CreateMessageRequest`](https://modelcontextprotocol.io/specification/2025-11-25/client/sampling) / `CreateMessageResult` types, including SEP-1577 `tools` / `toolChoice` / `tool_use` content blocks). The host has full discretion over model selection and SHOULD apply rate limiting, cost controls, and user approval (human-in-the-loop). Apps MUST check `hostCapabilities.sampling` before sending this request, and `hostCapabilities.sampling.tools` before including `tools` in the request params.
+- `sampling/createMessage` - Request an LLM completion from the host (uses the standard MCP [`CreateMessageRequest`](https://modelcontextprotocol.io/specification/2025-11-25/client/sampling) / `CreateMessageResult` types, including SEP-1577 `tools` / `toolChoice` / `tool_use` content blocks). The host has full discretion over model selection and SHOULD apply rate limiting, cost controls, and user approval (human-in-the-loop). Apps MUST check the Host's `ClientCapabilities.sampling` before sending this request, and `ClientCapabilities.sampling.tools` before including `tools` in the request params.
 
 **Notifications:**
 
@@ -538,12 +542,17 @@ Note that `tools/call` and `tools/list` flow **bidirectionally**:
 
 **Lifecycle:**
 
-- `ui/initialize` → `ui/notifications/initialized` - MCP-like handshake (replaces custom iframe-ready pattern in MCP-UI)
+- Core MCP lifecycle - Negotiates identity, protocol version, core capabilities, and MCP Apps extension settings
+- `ui/notifications/initialized` - Indicates that the View is ready to receive app requests and notifications
 - `ping` - Connection health check
 
-### App Capabilities in `ui/initialize`
+### View Readiness
 
-When the View sends an `ui/initialize` request to the Host, it MUST include its capabilities in the `appCapabilities` field:
+After completing the core MCP initialization lifecycle, the View MUST send `ui/notifications/initialized` to the Host. This notification means only that the View is ready to receive app requests and notifications; it does not negotiate identity or capabilities.
+
+### App Capabilities in `initialize`
+
+When the View sends an `initialize` request to the Host, it MUST include its capabilities in `ClientCapabilities.extensions["io.modelcontextprotocol/ui"]`. The Host MUST read the View's identity from `clientInfo`.
 
 ```typescript
 interface McpUiAppCapabilities {
@@ -562,9 +571,9 @@ interface McpUiAppCapabilities {
 }
 ```
 
-### Host Context in `McpUiInitializeResult`
+### Host Context in `InitializeResult`
 
-When the View sends an `ui/initialize` request to the Host, the Host SHOULD include UI-specific context in the `McpUiInitializeResult`'s `hostContext` field:
+When the View sends an `initialize` request to the Host, the Host SHOULD include UI-specific context in `ServerCapabilities.extensions["io.modelcontextprotocol/ui"].hostContext`:
 
 ```typescript
 interface HostContext {
@@ -625,37 +634,43 @@ interface HostContext {
 Example:
 
 ```json
-// Host responds with McpUiInitializeResult
+// Host responds with InitializeResult
 {
   "jsonrpc": "2.0",
   "id": 1,
   "result": {
     "protocolVersion": "2025-06-18",
-    "hostCapabilities": { /* ... */ },
-    "hostInfo": { "name": "claude-desktop", "version": "1.0.0" },
-    "hostContext": {
-      "theme": "dark",
-      "styles": {
-        "variables": {
-          "--color-background-primary": "light-dark(#ffffff, #171717)",
-          "--color-text-primary": "light-dark(#171717, #fafafa)",
-          "--font-sans": "Anthropic Sans, sans-serif",
-          ...
-        },
-        "css": {
-          "fonts": "@font-face { font-family: \"Custom Font Name\"; src: url(\"https://...\"); }"
+    "capabilities": {
+      "extensions": {
+        "io.modelcontextprotocol/ui": {
+          "openLinks": {},
+          "hostContext": {
+            "theme": "dark",
+            "styles": {
+              "variables": {
+                "--color-background-primary": "light-dark(#ffffff, #171717)",
+                "--color-text-primary": "light-dark(#171717, #fafafa)",
+                "--font-sans": "Anthropic Sans, sans-serif",
+                ...
+              },
+              "css": {
+                "fonts": "@font-face { font-family: \"Custom Font Name\"; src: url(\"https://...\"); }"
+              }
+            },
+            "displayMode": "inline",
+            "containerDimensions": { "width": 400, "maxHeight": 600 }
+          }
         }
-      },
-      "displayMode": "inline",
-      "containerDimensions": { "width": 400, "maxHeight": 600 }
-    }
+      }
+    },
+    "serverInfo": { "name": "claude-desktop", "version": "1.0.0" }
   }
 }
 ```
 
 ### Host Capabilities
 
-`HostCapabilities` are sent to the View as part of the response to `ui/initialize` (inside `McpUiInitializeResult`).
+`HostCapabilities` are sent to the View in `ServerCapabilities.extensions["io.modelcontextprotocol/ui"]` as part of the response to `initialize`. The View MUST read the Host's identity from `serverInfo`.
 They describe the features and capabilities that the Host supports.
 
 ```typescript
@@ -722,14 +737,8 @@ interface HostCapabilities {
   updateModelContext?: SupportedContentBlockModalities;
   /** Host supports receiving content messages (ui/message) from the view. */
   message?: SupportedContentBlockModalities;
-  /**
-   * Host supports LLM sampling (sampling/createMessage) from the view.
-   * Mirrors MCP ClientCapabilities.sampling so hosts can pass it through.
-   */
-  sampling?: {
-    /** Host supports tool use via `tools` and `toolChoice` params (SEP-1577). */
-    tools?: {};
-  };
+  /** Initial context for this View instance. */
+  hostContext?: HostContext;
 }
 ```
 
@@ -813,17 +822,21 @@ type McpUiDisplayMode = "inline" | "fullscreen" | "pip";
 
 #### Declaring Support
 
-**View (`appCapabilities.availableDisplayModes`):**
+**View (`ClientCapabilities.extensions["io.modelcontextprotocol/ui"].availableDisplayModes`):**
 
-Views declare which display modes they support in the `ui/initialize` request via `appCapabilities.availableDisplayModes`. This allows hosts to only offer display mode options that the view can handle.
+Views declare which display modes they support in the `initialize` request via `ClientCapabilities.extensions["io.modelcontextprotocol/ui"].availableDisplayModes`. This allows hosts to only offer display mode options that the view can handle.
 
 ```typescript
 // Example: View declares support for inline and fullscreen
 {
-  method: "ui/initialize",
+  method: "initialize",
   params: {
-    appCapabilities: {
-      availableDisplayModes: ["inline", "fullscreen"]
+    capabilities: {
+      extensions: {
+        "io.modelcontextprotocol/ui": {
+          availableDisplayModes: ["inline", "fullscreen"]
+        }
+      }
     },
     // ...
   }
@@ -845,12 +858,12 @@ Hosts notify views of display mode changes via `ui/notifications/host-context-ch
 #### Requirements
 
 **View behavior:**
-- View MUST declare all display modes it supports in `appCapabilities.availableDisplayModes` during initialization.
+- View MUST declare all display modes it supports in `ClientCapabilities.extensions["io.modelcontextprotocol/ui"].availableDisplayModes` during initialization.
 - View MUST check if the requested mode is in `availableDisplayModes` from host context before requesting a mode change.
 - View MUST handle the response mode differing from the requested mode.
 
 **Host behavior:**
-- Host MUST NOT switch the View to a display mode that does not appear in its `appCapabilities.availableDisplayModes`, if set.
+- Host MUST NOT switch the View to a display mode that does not appear in its `ClientCapabilities.extensions["io.modelcontextprotocol/ui"].availableDisplayModes`, if set.
 - Host MUST return the resulting mode (whether updated or not) in the response to `ui/request-display-mode`.
 - If the requested mode is not available, Host SHOULD return the current display mode in the response.
 - Host MAY decline display mode requests from Views that did not declare said modes in their capabilities.
@@ -1326,7 +1339,7 @@ interface Tool {
 
 #### Notifications (Host → View)
 
-`ui/notifications/tool-input` - Host MUST send this notification with the complete tool arguments after the View's initialize request completes.
+`ui/notifications/tool-input` - Host MUST send this notification with the complete tool arguments after the View sends `ui/notifications/initialized`.
 
 ```typescript
 {
@@ -1338,7 +1351,7 @@ interface Tool {
 }
 ```
 
-Host sends this notification after the View's initialize request completes, when tool arguments become available. This notification is sent at most once and is required before sending `ui/notifications/tool-result`.
+Host sends this notification after the View sends `ui/notifications/initialized`, when tool arguments become available. This notification is sent at most once and is required before sending `ui/notifications/tool-result`.
 
 `ui/notifications/tool-input-partial` - Host MAY send this notification zero or more times while the agent is streaming tool arguments, before `ui/notifications/tool-input` is sent.
 
@@ -1548,9 +1561,10 @@ sequenceDiagram
       P -> P: Render inner iframe with HTML
 
     end
-    UI ->> H: ui/initialize
-    H -->> UI: McpUiInitializeResult (e.g., host-context, capabilities, etc.)
-    UI ->> H: ui/notifications/initialized
+    UI ->> H: initialize
+    H -->> UI: InitializeResult (e.g., serverInfo, capabilities, host context, etc.)
+    UI ->> H: notifications/initialized
+    UI ->> H: ui/notifications/initialized (View ready)
     opt Stream Tool input to UI
       H -->> UI: ui/notifications/tool-input-partial (0..n)
     end
@@ -1630,8 +1644,8 @@ Note: Teardown may be triggered at any point in the lifecycle following View ini
 
 #### Key Differences from Pre-SEP MCP-UI:
 
-- Handshakes using MCP-like `ui/initialize` / `ui/notifications/initialized` messages instead of `iframe-ready`
-- Capabilities negotiated via `McpUiInitializeResult`
+- Identity and capabilities negotiated via the standard MCP initialization lifecycle
+- `ui/notifications/initialized` replaces `iframe-ready` as the View readiness signal
 - Tool data passed via notifications
 
 ### Data Passing
@@ -2177,7 +2191,7 @@ See [ext-apps#35](https://github.com/modelcontextprotocol/ext-apps/issues/35) fo
 
 ### Client\<\>Server Capability Negotiation
 
-Clients and servers negotiate MCP Apps support through the standard MCP extensions capability mechanism (defined in SEP-1724).
+Clients and servers negotiate MCP Apps support through the standard MCP extensions capability mechanism defined in [SEP-2133](https://modelcontextprotocol.io/seps/2133-extensions). The extension is negotiated only when both participants advertise it in their capabilities.
 
 #### Client (Host) Capabilities
 
@@ -2187,7 +2201,7 @@ Clients advertise MCP Apps support in the initialize request using the extension
 {
   "method": "initialize",
   "params": {
-    "protocolVersion": "2024-11-05",
+    "protocolVersion": "2025-06-18",
     "capabilities": {
       "extensions": {
         "io.modelcontextprotocol/ui": {
@@ -2211,6 +2225,27 @@ Future versions may add additional settings:
 
 - `features`: Specific feature support (e.g., `["streaming", "persistence"]`)
 - `sandboxPolicies`: Supported sandbox attribute configurations
+
+#### Server Capabilities
+
+Servers advertise MCP Apps support in the initialize result using the same extension identifier:
+
+```json
+{
+  "result": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {
+      "extensions": {
+        "io.modelcontextprotocol/ui": {}
+      }
+    },
+    "serverInfo": {
+      "name": "weather-server",
+      "version": "1.0.0"
+    }
+  }
+}
+```
 
 #### Server Behavior
 
@@ -2247,20 +2282,25 @@ if (uiCap?.mimeTypes?.includes(RESOURCE_MIME_TYPE)) {
 
 #### App (Guest UI) Capabilities
 
-Apps advertise their capabilities in the `ui/initialize` request to the host. When an app supports tool registration, it includes the `tools` capability:
+Apps advertise their capabilities in the standard `initialize` request to the host. When an app supports tool registration, it includes the `tools` capability in the extension settings:
 
 ```json
 {
-  "method": "ui/initialize",
+  "method": "initialize",
   "params": {
-    "appInfo": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {
+      "extensions": {
+        "io.modelcontextprotocol/ui": {
+          "tools": {
+            "listChanged": true
+          }
+        }
+      }
+    },
+    "clientInfo": {
       "name": "TicTacToe",
       "version": "1.0.0"
-    },
-    "appCapabilities": {
-      "tools": {
-        "listChanged": true
-      }
     }
   }
 }
@@ -2271,16 +2311,21 @@ The host responds with its own capabilities, including support for proxying serv
 ```json
 {
   "result": {
-    "hostInfo": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {
+      "extensions": {
+        "io.modelcontextprotocol/ui": {
+          "serverTools": {
+            "listChanged": true
+          },
+          "openLinks": {},
+          "logging": {}
+        }
+      }
+    },
+    "serverInfo": {
       "name": "claude-desktop",
       "version": "1.0.0"
-    },
-    "hostCapabilities": {
-      "serverTools": {
-        "listChanged": true
-      },
-      "openLinks": {},
-      "logging": {}
     }
   }
 }
@@ -2637,7 +2682,7 @@ Hosts MAY implement different permission levels based on tool annotations:
 
 App tools MUST be tied to the app's lifecycle:
 
-- Tools become available once the app advertises the `tools` capability in `ui/initialize` and the host issues `tools/list`; subsequent changes are signaled via `notifications/tools/list_changed`
+- Tools become available once the app advertises the `tools` capability in `initialize`, sends `ui/notifications/initialized`, and the host issues `tools/list`; subsequent changes are signaled via `notifications/tools/list_changed`
 - Tools automatically disappear when app iframe is torn down
 - Hosts MUST NOT persist app tool registrations across sessions
 - Calling a tool from a closed app MUST return an error
