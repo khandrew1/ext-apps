@@ -1,6 +1,7 @@
 import {
   type RequestOptions,
   mergeCapabilities,
+  Protocol,
   ProtocolOptions,
 } from "@modelcontextprotocol/sdk/shared/protocol.js";
 
@@ -32,8 +33,8 @@ import {
   ToolListChangedNotification,
 } from "@modelcontextprotocol/sdk/types.js";
 import { AppNotification, AppRequest, AppResult } from "./types";
-import { ProtocolWithEvents } from "./events";
-export { ProtocolWithEvents };
+import { EventDispatcher } from "./events";
+export { EventDispatcher } from "./events";
 import { PostMessageTransport } from "./message-transport";
 import {
   LATEST_PROTOCOL_VERSION,
@@ -74,7 +75,9 @@ import {
   standardSchemaToJsonSchema,
   validateStandardSchema,
 } from "./standard-schema";
-import { z } from "zod/v4";
+import { z, type ZodLiteral, type ZodObject } from "zod/v4";
+
+type MethodSchema = ZodObject<{ method: ZodLiteral<string> }>;
 
 export type {
   StandardSchemaV1,
@@ -271,9 +274,9 @@ export type RegisteredAppTool = {
 /**
  * Maps DOM-style event names to their notification `params` types.
  *
- * Used by {@link App `App`} (which extends {@link ProtocolWithEvents `ProtocolWithEvents`})
- * to provide type-safe `addEventListener` / `removeEventListener` and
- * singular `on*` handler support.
+ * Used by {@link App `App`} and its composed {@link EventDispatcher} to
+ * provide type-safe `addEventListener` / `removeEventListener` and singular
+ * `on*` handler support.
  */
 export type AppEventMap = {
   toolinput: McpUiToolInputNotification["params"];
@@ -304,15 +307,13 @@ export type AppEventMap = {
  * 3. **Interactive**: Send requests, receive notifications, call tools
  * 4. **Teardown**: Host sends teardown request before unmounting
  *
- * ## Inherited Methods
+ * ## Protocol and event methods
  *
- * As a subclass of {@link ProtocolWithEvents `ProtocolWithEvents`}, `App` inherits:
+ * As a subclass of the MCP SDK's `Protocol`, `App` provides:
  * - `setRequestHandler()` - Register handlers for requests from host
  * - `setNotificationHandler()` - Register handlers for notifications from host
  * - `addEventListener()` - Append a listener for a notification event (multi-listener)
  * - `removeEventListener()` - Remove a previously added listener
- *
- * @see {@link ProtocolWithEvents `ProtocolWithEvents`} for the DOM-model event system
  *
  * ## Notification Setters (DOM-model `on*` handlers)
  *
@@ -342,17 +343,37 @@ export type AppEventMap = {
  * await app.connect();
  * ```
  */
-export class App extends ProtocolWithEvents<
-  AppRequest,
-  AppNotification,
-  AppResult,
-  AppEventMap
-> {
+export class App extends Protocol<AppRequest, AppNotification, AppResult> {
   private _hostCapabilities?: McpUiHostCapabilities;
   private _hostInfo?: Implementation;
   private _hostContext?: McpUiHostContext;
   private _registeredTools: { [name: string]: RegisteredAppTool } = {};
   private _initializedSent = false;
+  private readonly _registeredMethods = new Set<string>();
+  private readonly _registeredEvents = new Set<keyof AppEventMap>();
+  private readonly _events = new EventDispatcher<AppEventMap>();
+
+  // ProtocolWithEvents previously owned these registration guards. Keep them
+  // on App to preserve the existing double-registration behavior while event
+  // fan-out moves to protocol-independent composition. Arrow-function fields
+  // ensure Protocol's constructor uses its own methods before the guards init.
+  override setRequestHandler: Protocol<
+    AppRequest,
+    AppNotification,
+    AppResult
+  >["setRequestHandler"] = (schema, handler) => {
+    this._assertMethodNotRegistered(schema, "setRequestHandler");
+    super.setRequestHandler(schema, handler);
+  };
+
+  override setNotificationHandler: Protocol<
+    AppRequest,
+    AppNotification,
+    AppResult
+  >["setNotificationHandler"] = (schema, handler) => {
+    this._assertMethodNotRegistered(schema, "setNotificationHandler");
+    super.setNotificationHandler(schema, handler);
+  };
 
   /**
    * Warn if a host-bound method is called before {@link connect `connect`} has
@@ -378,7 +399,9 @@ export class App extends ProtocolWithEvents<
     console.warn(`${msg}. This will throw in a future release.`);
   }
 
-  protected readonly eventSchemas = {
+  private readonly eventSchemas: {
+    [K in keyof AppEventMap]: MethodSchema;
+  } = {
     toolinput: McpUiToolInputNotificationSchema,
     toolinputpartial: McpUiToolInputPartialNotificationSchema,
     toolresult: McpUiToolResultNotificationSchema,
@@ -427,29 +450,84 @@ export class App extends ProtocolWithEvents<
     console.warn(msg);
   }
 
-  protected override setEventHandler<K extends keyof AppEventMap>(
+  protected setEventHandler<K extends keyof AppEventMap>(
     event: K,
     handler: ((params: AppEventMap[K]) => void) | undefined,
   ): void {
     if (handler) this._assertHandlerTiming(event);
-    super.setEventHandler(event, handler);
+    this._ensureEventSlot(event);
+    this._events.setHandler(event, handler);
   }
 
-  override addEventListener<K extends keyof AppEventMap>(
+  addEventListener<K extends keyof AppEventMap>(
     event: K,
     handler: (params: AppEventMap[K]) => void,
   ): void {
     this._assertHandlerTiming(event);
-    super.addEventListener(event, handler);
+    this._ensureEventSlot(event);
+    this._events.addEventListener(event, handler);
   }
 
-  protected override onEventDispatch<K extends keyof AppEventMap>(
+  removeEventListener<K extends keyof AppEventMap>(
     event: K,
-    params: AppEventMap[K],
+    handler: (params: AppEventMap[K]) => void,
   ): void {
-    if (event === "hostcontextchanged") {
-      this._hostContext = { ...this._hostContext, ...params };
+    this._events.removeEventListener(event, handler);
+  }
+
+  private _ensureEventSlot<K extends keyof AppEventMap>(event: K): void {
+    if (this._registeredEvents.has(event)) return;
+    const schema = this.eventSchemas[event];
+    if (!schema) throw new Error(`Unknown event: ${String(event)}`);
+    this.setNotificationHandler(schema, (notification) => {
+      const params = (notification as { params: AppEventMap[K] }).params;
+      if (event === "hostcontextchanged") {
+        this._hostContext = { ...this._hostContext, ...params };
+      }
+      this._events.dispatch(event, params);
+    });
+    this._registeredEvents.add(event);
+  }
+
+  protected getEventHandler<K extends keyof AppEventMap>(
+    event: K,
+  ): ((params: AppEventMap[K]) => void) | undefined {
+    return this._events.getHandler(event);
+  }
+
+  protected warnIfRequestHandlerReplaced(
+    name: string,
+    previous: unknown,
+    next: unknown,
+  ): void {
+    if (previous && next) {
+      console.warn(
+        `[MCP Apps] ${name} handler replaced. ` +
+          `Previous handler will no longer be called.`,
+      );
     }
+  }
+
+  protected replaceRequestHandler: Protocol<
+    AppRequest,
+    AppNotification,
+    AppResult
+  >["setRequestHandler"] = (schema, handler) => {
+    const method = (schema as MethodSchema).shape.method.value;
+    this._registeredMethods.add(method);
+    super.setRequestHandler(schema, handler);
+  };
+
+  private _assertMethodNotRegistered(schema: unknown, via: string): void {
+    const method = (schema as MethodSchema).shape.method.value;
+    if (this._registeredMethods.has(method)) {
+      throw new Error(
+        `Handler for "${method}" already registered (via ${via}). ` +
+          `Use addEventListener() to attach multiple listeners, ` +
+          `or the on* setter for replace semantics.`,
+      );
+    }
+    this._registeredMethods.add(method);
   }
 
   /**
@@ -484,9 +562,8 @@ export class App extends ProtocolWithEvents<
       return {};
     });
 
-    // Eagerly register the hostcontextchanged event slot so that
-    // onEventDispatch (which merges into _hostContext) fires even if the
-    // user never assigns onhostcontextchanged or calls addEventListener.
+    // Eagerly register hostcontextchanged so the owner-side context merge runs
+    // even if the user never assigns a handler or adds a listener.
     this.setEventHandler("hostcontextchanged", undefined);
   }
 
@@ -924,9 +1001,9 @@ export class App extends ProtocolWithEvents<
    * without replacing.
    *
    * Notification params are automatically merged into the internal host context
-   * via {@link onEventDispatch `onEventDispatch`} before any handler or listener
-   * fires. This means {@link getHostContext `getHostContext`} will return the
-   * updated values even before your callback runs.
+   * before any handler or listener fires. This means
+   * {@link getHostContext `getHostContext`} will return the updated values even
+   * before your callback runs.
    *
    * Register handlers before calling {@link connect `connect`} to avoid missing notifications.
    *

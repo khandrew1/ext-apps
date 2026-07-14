@@ -2713,7 +2713,7 @@ describe("isToolVisibilityAppOnly", () => {
       expect(a).toEqual([]);
     });
 
-    it("App.onEventDispatch merges hostcontext before listeners fire", async () => {
+    it("App merges hostcontext before listeners fire", async () => {
       let seen: unknown;
       app.addEventListener("hostcontextchanged", () => {
         seen = app.getHostContext();

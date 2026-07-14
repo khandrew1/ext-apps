@@ -47,7 +47,10 @@ import {
   ProtocolOptions,
   RequestOptions,
 } from "@modelcontextprotocol/sdk/shared/protocol.js";
-import { ProtocolWithEvents } from "./events";
+import { EventDispatcher } from "./events";
+import type { ZodLiteral, ZodObject } from "zod/v4";
+
+type MethodSchema = ZodObject<{ method: ZodLiteral<string> }>;
 
 import {
   type AppNotification,
@@ -303,16 +306,36 @@ export type AppBridgeEventMap = {
  * await bridge.connect(transport);
  * ```
  */
-export class AppBridge extends ProtocolWithEvents<
-  AppRequest,
-  AppNotification,
-  AppResult,
-  AppBridgeEventMap
-> {
+export class AppBridge extends Protocol<AppRequest, AppNotification, AppResult> {
   private _appCapabilities?: McpUiAppCapabilities;
   private _hostContext: McpUiHostContext = {};
   private _appInfo?: Implementation;
   private _initializedReceived = false;
+  private readonly _registeredMethods = new Set<string>();
+  private readonly _registeredEvents = new Set<keyof AppBridgeEventMap>();
+  private readonly _events = new EventDispatcher<AppBridgeEventMap>();
+
+  // ProtocolWithEvents previously owned these registration guards. Keep them
+  // on AppBridge to preserve the existing double-registration behavior while
+  // event fan-out moves to protocol-independent composition. Arrow-function
+  // fields let Protocol's constructor run before the guards initialize.
+  override setRequestHandler: Protocol<
+    AppRequest,
+    AppNotification,
+    AppResult
+  >["setRequestHandler"] = (schema, handler) => {
+    this._assertMethodNotRegistered(schema, "setRequestHandler");
+    super.setRequestHandler(schema, handler);
+  };
+
+  override setNotificationHandler: Protocol<
+    AppRequest,
+    AppNotification,
+    AppResult
+  >["setNotificationHandler"] = (schema, handler) => {
+    this._assertMethodNotRegistered(schema, "setNotificationHandler");
+    super.setNotificationHandler(schema, handler);
+  };
 
   /**
    * Wrap every handler registered via `replaceRequestHandler` with a check
@@ -324,13 +347,14 @@ export class AppBridge extends ProtocolWithEvents<
    *
    * @see {@link https://github.com/anthropics/claude-ai-mcp/issues/149 claude-ai-mcp#149}
    */
-  private _baseReplaceRequestHandler = this.replaceRequestHandler;
-  protected override replaceRequestHandler: Protocol<
+  protected replaceRequestHandler: Protocol<
     AppRequest,
     AppNotification,
     AppResult
   >["setRequestHandler"] = (schema, handler) => {
-    this._baseReplaceRequestHandler(schema, (request, extra) => {
+    const method = (schema as MethodSchema).shape.method.value;
+    this._registeredMethods.add(method);
+    super.setRequestHandler(schema, (request, extra) => {
       if (!this._initializedReceived) {
         console.warn(
           `[ext-apps] AppBridge received '${request.method}' before ` +
@@ -343,13 +367,83 @@ export class AppBridge extends ProtocolWithEvents<
     });
   };
 
-  protected readonly eventSchemas = {
+  private readonly eventSchemas: {
+    [K in keyof AppBridgeEventMap]: MethodSchema;
+  } = {
     sizechange: McpUiSizeChangedNotificationSchema,
     sandboxready: McpUiSandboxProxyReadyNotificationSchema,
     initialized: McpUiInitializedNotificationSchema,
     requestteardown: McpUiRequestTeardownNotificationSchema,
     loggingmessage: LoggingMessageNotificationSchema,
   };
+
+  protected setEventHandler<K extends keyof AppBridgeEventMap>(
+    event: K,
+    handler: ((params: AppBridgeEventMap[K]) => void) | undefined,
+  ): void {
+    this._ensureEventSlot(event);
+    this._events.setHandler(event, handler);
+  }
+
+  protected getEventHandler<K extends keyof AppBridgeEventMap>(
+    event: K,
+  ): ((params: AppBridgeEventMap[K]) => void) | undefined {
+    return this._events.getHandler(event);
+  }
+
+  addEventListener<K extends keyof AppBridgeEventMap>(
+    event: K,
+    handler: (params: AppBridgeEventMap[K]) => void,
+  ): void {
+    this._ensureEventSlot(event);
+    this._events.addEventListener(event, handler);
+  }
+
+  removeEventListener<K extends keyof AppBridgeEventMap>(
+    event: K,
+    handler: (params: AppBridgeEventMap[K]) => void,
+  ): void {
+    this._events.removeEventListener(event, handler);
+  }
+
+  private _ensureEventSlot<K extends keyof AppBridgeEventMap>(
+    event: K,
+  ): void {
+    if (this._registeredEvents.has(event)) return;
+    const schema = this.eventSchemas[event];
+    if (!schema) throw new Error(`Unknown event: ${String(event)}`);
+    this.setNotificationHandler(schema, (notification) => {
+      const params = (notification as { params: AppBridgeEventMap[K] }).params;
+      if (event === "initialized") this._initializedReceived = true;
+      this._events.dispatch(event, params);
+    });
+    this._registeredEvents.add(event);
+  }
+
+  protected warnIfRequestHandlerReplaced(
+    name: string,
+    previous: unknown,
+    next: unknown,
+  ): void {
+    if (previous && next) {
+      console.warn(
+        `[MCP Apps] ${name} handler replaced. ` +
+          `Previous handler will no longer be called.`,
+      );
+    }
+  }
+
+  private _assertMethodNotRegistered(schema: unknown, via: string): void {
+    const method = (schema as MethodSchema).shape.method.value;
+    if (this._registeredMethods.has(method)) {
+      throw new Error(
+        `Handler for "${method}" already registered (via ${via}). ` +
+          `Use addEventListener() to attach multiple listeners, ` +
+          `or the on* setter for replace semantics.`,
+      );
+    }
+    this._registeredMethods.add(method);
+  }
 
   /**
    * Create a new AppBridge instance.
@@ -392,9 +486,7 @@ export class AppBridge extends ProtocolWithEvents<
   ) {
     super(options);
 
-    this.addEventListener("initialized", () => {
-      this._initializedReceived = true;
-    });
+    this._ensureEventSlot("initialized");
 
     this._hostContext = options?.hostContext || {};
 
