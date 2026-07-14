@@ -7,10 +7,7 @@ import {
   ListPromptsResultSchema,
   ListResourcesResultSchema,
   ListResourceTemplatesResultSchema,
-  PromptListChangedNotificationSchema,
   ReadResourceResultSchema,
-  ResourceListChangedNotificationSchema,
-  ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod/v4";
 
@@ -2313,9 +2310,12 @@ describe("App <-> AppBridge integration", () => {
 
     it("sendToolListChanged sends notification to app", async () => {
       const receivedNotifications: unknown[] = [];
-      app.setNotificationHandler(ToolListChangedNotificationSchema, (n) => {
-        receivedNotifications.push(n.params);
-      });
+      app.setNotificationHandler(
+        "notifications/tools/list_changed",
+        (notification) => {
+          receivedNotifications.push(notification.params);
+        },
+      );
 
       await bridge.connect(bridgeTransport);
       await app.connect(appTransport);
@@ -2328,9 +2328,12 @@ describe("App <-> AppBridge integration", () => {
 
     it("sendResourceListChanged sends notification to app", async () => {
       const receivedNotifications: unknown[] = [];
-      app.setNotificationHandler(ResourceListChangedNotificationSchema, (n) => {
-        receivedNotifications.push(n.params);
-      });
+      app.setNotificationHandler(
+        "notifications/resources/list_changed",
+        (notification) => {
+          receivedNotifications.push(notification.params);
+        },
+      );
 
       await bridge.connect(bridgeTransport);
       await app.connect(appTransport);
@@ -2343,9 +2346,12 @@ describe("App <-> AppBridge integration", () => {
 
     it("sendPromptListChanged sends notification to app", async () => {
       const receivedNotifications: unknown[] = [];
-      app.setNotificationHandler(PromptListChangedNotificationSchema, (n) => {
-        receivedNotifications.push(n.params);
-      });
+      app.setNotificationHandler(
+        "notifications/prompts/list_changed",
+        (notification) => {
+          receivedNotifications.push(notification.params);
+        },
+      );
 
       await bridge.connect(bridgeTransport);
       await app.connect(appTransport);
@@ -2768,20 +2774,6 @@ describe("isToolVisibilityAppOnly", () => {
           // @ts-expect-error — exercising throw path with raw schema
           { shape: { method: { value: "test/method" } } },
           () => ({}),
-        );
-      }).toThrow(/already registered/);
-    });
-
-    it("direct setNotificationHandler throws for event-mapped methods", () => {
-      const app2 = new App(testAppInfo, {}, { autoResize: false });
-      app2.addEventListener("toolinput", () => {});
-      expect(() => {
-        app2.setNotificationHandler(
-          // @ts-expect-error — exercising throw path with raw schema
-          {
-            shape: { method: { value: "ui/notifications/tool-input" } },
-          },
-          () => {},
         );
       }).toThrow(/already registered/);
     });
