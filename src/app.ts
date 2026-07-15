@@ -174,9 +174,9 @@ export const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 /**
  * Options for configuring {@link App `App`} behavior.
  *
- * Extends `ProtocolOptions` from the MCP SDK with `App`-specific configuration.
+ * Extends `ClientOptions` from the base MCP SDK with `App`-specific configuration.
  *
- * @see `ProtocolOptions` from @modelcontextprotocol/sdk for inherited options
+ * @see `ClientOptions` from @modelcontextprotocol/client for inherited options
  */
 export type AppOptions = Omit<
   ClientOptions,
@@ -243,7 +243,7 @@ export type AppToolResult<
  * validated/parsed input; when `In` is `undefined`, the callback receives only
  * `extra`. When `Out` is provided, the return's `structuredContent` is typed.
  *
- * Mirrors `ToolCallback` from `@modelcontextprotocol/sdk/server/mcp.js` but is
+ * Mirrors `ToolCallback` from `@modelcontextprotocol/server` but is
  * parameterized over {@link StandardSchemaV1} instead of zod, so any
  * Standard-Schema-compatible library (Zod, ArkType, Valibot, …) can be used.
  */
@@ -261,7 +261,7 @@ export type AppToolCallback<
 
 /**
  * Handle returned by {@link App.registerTool}. Mirrors `RegisteredTool` from
- * `@modelcontextprotocol/sdk/server/mcp.js` but stores
+ * `@modelcontextprotocol/server` but stores
  * {@link StandardSchemaV1} schemas.
  */
 export type RegisteredAppTool = {
@@ -302,9 +302,8 @@ export type AppEventMap = {
  * Main class for MCP Apps to communicate with their host.
  *
  * The `App` class provides a framework-agnostic way to build interactive MCP Apps
- * that run inside host applications. It extends the MCP SDK's `Protocol` class and
- * handles the connection lifecycle, initialization handshake, and bidirectional
- * communication with the host.
+ * that run inside host applications. It extends the base MCP SDK's public
+ * `Client` class and adds the Apps handshake, lifecycle, and high-level APIs.
  *
  * ## Architecture
  *
@@ -321,7 +320,7 @@ export type AppEventMap = {
  *
  * ## Protocol and event methods
  *
- * As a subclass of the MCP SDK's `Protocol`, `App` provides:
+ * As a subclass of the base MCP SDK's `Client`, `App` provides:
  * - `setRequestHandler()` - Register handlers for requests from host
  * - `setNotificationHandler()` - Register handlers for notifications from host
  * - `addEventListener()` - Append a listener for a notification event (multi-listener)
@@ -1458,8 +1457,8 @@ export class App extends Client {
    * }
    * ```
    *
-   * @see `CreateMessageRequest` from @modelcontextprotocol/sdk for the request type
-   * @see `CreateMessageResult` / `CreateMessageResultWithTools` from @modelcontextprotocol/sdk for result types
+   * @see `CreateMessageRequest` from @modelcontextprotocol/client for the request type
+   * @see `CreateMessageResult` / `CreateMessageResultWithTools` from @modelcontextprotocol/client for result types
    */
   async createSamplingMessage(
     params: CreateMessageRequest["params"] & { tools?: undefined },

@@ -38,9 +38,8 @@ export class EventDispatcher<EventMap extends Record<string, unknown>> {
   getHandler<K extends keyof EventMap>(
     event: K,
   ): ((params: EventMap[K]) => void) | undefined {
-    return (this._eventSlots.get(event) as
-      | EventSlot<EventMap[K]>
-      | undefined)?.onHandler;
+    return (this._eventSlots.get(event) as EventSlot<EventMap[K]> | undefined)
+      ?.onHandler;
   }
 
   /** Add a listener. Listeners run in insertion order after the handler. */

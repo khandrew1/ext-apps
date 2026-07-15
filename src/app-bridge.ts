@@ -261,7 +261,7 @@ export type AppBridgeEventMap = {
 /**
  * Host-side bridge for communicating with a single View ({@link app!App `App`}).
  *
- * `AppBridge` extends the MCP SDK's `Protocol` class and acts as a proxy between
+ * `AppBridge` extends the base MCP SDK's public `Server` class and acts as a proxy between
  * the host application and a view running in an iframe. When an MCP client
  * is provided to the constructor, it automatically forwards MCP server capabilities
  * (tools, resources, prompts) to the view. It also handles the initialization
@@ -667,8 +667,7 @@ export class AppBridge extends Server {
    * ```typescript
    * bridge.onsandboxready = async () => {
    *   const resource = await mcpClient.request(
-   *     { method: "resources/read", params: { uri: "ui://my-app" } },
-   *     ReadResourceResultSchema
+   *     { method: "resources/read", params: { uri: "ui://my-app" } }
    *   );
    *
    *   bridge.sendSandboxResourceReady({
@@ -1154,14 +1153,13 @@ export class AppBridge extends Server {
    * bridge.oncalltool = async (params, extra) => {
    *   return mcpClient.request(
    *     { method: "tools/call", params },
-   *     CallToolResultSchema,
-   *     { signal: extra.signal },
+   *     { signal: extra.mcpReq.signal },
    *   );
    * };
    * ```
    *
-   * @see `CallToolRequest` from @modelcontextprotocol/sdk for the request type
-   * @see `CallToolResult` from @modelcontextprotocol/sdk for the result type
+   * @see `CallToolRequest` from @modelcontextprotocol/server for the request type
+   * @see `CallToolResult` from @modelcontextprotocol/server for the result type
    */
   private _oncalltool?: (
     params: CallToolRequest["params"],
@@ -1209,12 +1207,14 @@ export class AppBridge extends Server {
    * ```ts source="./app-bridge.examples.ts#AppBridge_oncreatesamplingmessage_forwardToLlm"
    * bridge.oncreatesamplingmessage = async (params, extra) => {
    *   // Apply rate limiting, user approval, cost controls here
-   *   return await myLlmProvider.complete(params, { signal: extra.signal });
+   *   return await myLlmProvider.complete(params, {
+   *     signal: extra.mcpReq.signal,
+   *   });
    * };
    * ```
    *
-   * @see `CreateMessageRequest` from @modelcontextprotocol/sdk for the request type
-   * @see `CreateMessageResult` / `CreateMessageResultWithTools` from @modelcontextprotocol/sdk for result types
+   * @see `CreateMessageRequest` from @modelcontextprotocol/server for the request type
+   * @see `CreateMessageResult` / `CreateMessageResultWithTools` from @modelcontextprotocol/server for result types
    */
   set oncreatesamplingmessage(
     callback: (
@@ -1244,7 +1244,7 @@ export class AppBridge extends Server {
    * });
    * ```
    *
-   * @see `ToolListChangedNotification` from @modelcontextprotocol/sdk for the notification type
+   * @see `ToolListChangedNotification` from @modelcontextprotocol/server for the notification type
    */
   sendToolListChanged(params: ToolListChangedNotification["params"] = {}) {
     return this.notification({
@@ -1270,14 +1270,13 @@ export class AppBridge extends Server {
    * bridge.onlistresources = async (params, extra) => {
    *   return mcpClient.request(
    *     { method: "resources/list", params },
-   *     ListResourcesResultSchema,
-   *     { signal: extra.signal },
+   *     { signal: extra.mcpReq.signal },
    *   );
    * };
    * ```
    *
-   * @see `ListResourcesRequest` from @modelcontextprotocol/sdk for the request type
-   * @see `ListResourcesResult` from @modelcontextprotocol/sdk for the result type
+   * @see `ListResourcesRequest` from @modelcontextprotocol/server for the request type
+   * @see `ListResourcesResult` from @modelcontextprotocol/server for the result type
    */
   private _onlistresources?: (
     params: ListResourcesRequest["params"],
@@ -1325,14 +1324,13 @@ export class AppBridge extends Server {
    * bridge.onlistresourcetemplates = async (params, extra) => {
    *   return mcpClient.request(
    *     { method: "resources/templates/list", params },
-   *     ListResourceTemplatesResultSchema,
-   *     { signal: extra.signal }
+   *     { signal: extra.mcpReq.signal }
    *   );
    * };
    * ```
    *
-   * @see `ListResourceTemplatesRequest` from @modelcontextprotocol/sdk for the request type
-   * @see `ListResourceTemplatesResult` from @modelcontextprotocol/sdk for the result type
+   * @see `ListResourceTemplatesRequest` from @modelcontextprotocol/server for the request type
+   * @see `ListResourceTemplatesResult` from @modelcontextprotocol/server for the result type
    */
   private _onlistresourcetemplates?: (
     params: ListResourceTemplatesRequest["params"],
@@ -1383,14 +1381,13 @@ export class AppBridge extends Server {
    * bridge.onreadresource = async (params, extra) => {
    *   return mcpClient.request(
    *     { method: "resources/read", params },
-   *     ReadResourceResultSchema,
-   *     { signal: extra.signal },
+   *     { signal: extra.mcpReq.signal },
    *   );
    * };
    * ```
    *
-   * @see `ReadResourceRequest` from @modelcontextprotocol/sdk for the request type
-   * @see `ReadResourceResult` from @modelcontextprotocol/sdk for the result type
+   * @see `ReadResourceRequest` from @modelcontextprotocol/server for the request type
+   * @see `ReadResourceResult` from @modelcontextprotocol/server for the result type
    */
   private _onreadresource?: (
     params: ReadResourceRequest["params"],
@@ -1438,7 +1435,7 @@ export class AppBridge extends Server {
    * });
    * ```
    *
-   * @see `ResourceListChangedNotification` from @modelcontextprotocol/sdk for the notification type
+   * @see `ResourceListChangedNotification` from @modelcontextprotocol/server for the notification type
    */
   sendResourceListChanged(
     params: ResourceListChangedNotification["params"] = {},
@@ -1466,14 +1463,13 @@ export class AppBridge extends Server {
    * bridge.onlistprompts = async (params, extra) => {
    *   return mcpClient.request(
    *     { method: "prompts/list", params },
-   *     ListPromptsResultSchema,
-   *     { signal: extra.signal },
+   *     { signal: extra.mcpReq.signal },
    *   );
    * };
    * ```
    *
-   * @see `ListPromptsRequest` from @modelcontextprotocol/sdk for the request type
-   * @see `ListPromptsResult` from @modelcontextprotocol/sdk for the result type
+   * @see `ListPromptsRequest` from @modelcontextprotocol/server for the request type
+   * @see `ListPromptsResult` from @modelcontextprotocol/server for the result type
    */
   private _onlistprompts?: (
     params: ListPromptsRequest["params"],
@@ -1520,7 +1516,7 @@ export class AppBridge extends Server {
    * });
    * ```
    *
-   * @see `PromptListChangedNotification` from @modelcontextprotocol/sdk for the notification type
+   * @see `PromptListChangedNotification` from @modelcontextprotocol/server for the notification type
    */
   sendPromptListChanged(params: PromptListChangedNotification["params"] = {}) {
     return this.notification({
@@ -1722,10 +1718,10 @@ export class AppBridge extends Server {
    *
    * @example
    * ```ts source="./app-bridge.examples.ts#AppBridge_sendToolResult_afterExecution"
-   * const result = await mcpClient.request(
-   *   { method: "tools/call", params: { name: "get_weather", arguments: args } },
-   *   CallToolResultSchema,
-   * );
+   * const result = await mcpClient.request({
+   *   method: "tools/call",
+   *   params: { name: "get_weather", arguments: args },
+   * });
    * bridge.sendToolResult(result);
    * ```
    *

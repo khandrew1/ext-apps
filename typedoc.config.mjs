@@ -1,5 +1,7 @@
 import { OptionDefaults } from "typedoc";
 
+const BASE_SDK_DOCS = "https://ts.sdk.modelcontextprotocol.io/v2/";
+
 /** @type {Partial<import('typedoc').TypeDocOptions>} */
 const config = {
   name: "MCP Apps",
@@ -29,6 +31,28 @@ const config = {
   excludePrivate: true,
   excludeInternal: false,
   intentionallyNotExported: ["RequestHandlerExtra"],
+  externalSymbolLinkMappings: {
+    "@modelcontextprotocol/client": {
+      ClientOptions: BASE_SDK_DOCS,
+      ConnectOptions: BASE_SDK_DOCS,
+      DiscoverResult: BASE_SDK_DOCS,
+      ProtocolError: BASE_SDK_DOCS,
+      "Protocol.close": BASE_SDK_DOCS,
+      "Protocol.notification": BASE_SDK_DOCS,
+      ResponseCacheStore: BASE_SDK_DOCS,
+      SdkError: BASE_SDK_DOCS,
+      "SdkErrorCode.MethodNotSupportedByProtocolVersion": BASE_SDK_DOCS,
+      "__type.enforceStrictCapabilities": BASE_SDK_DOCS,
+    },
+    "@modelcontextprotocol/server": {
+      LoggingMessageNotification: BASE_SDK_DOCS,
+      "McpServer.registerTool": BASE_SDK_DOCS,
+      "MessageExtraInfo.classification": BASE_SDK_DOCS,
+      "Protocol.close": BASE_SDK_DOCS,
+      "Protocol.notification": BASE_SDK_DOCS,
+      "SdkErrorCode.UnsupportedResultType": BASE_SDK_DOCS,
+    },
+  },
   blockTags: [...OptionDefaults.blockTags, "@description"],
   jsDocCompatibility: {
     exampleTag: false,
@@ -49,6 +73,7 @@ const config = {
   out: "docs/api",
   plugin: [
     "typedoc-github-theme",
+    "./scripts/typedoc-plugin-base-sdk-links.mjs",
     "./scripts/typedoc-plugin-fix-mermaid-entities.mjs",
     "./scripts/typedoc-plugin-seo.mjs",
     "./scripts/typedoc-plugin-mcpstyle.mjs",
