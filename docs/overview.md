@@ -56,7 +56,11 @@ flowchart LR
 - **Host** — The chat client (e.g., Claude Desktop) that connects to servers, embeds Views in iframes, and proxies communication between them.
 - **View** — The UI running inside a sandboxed iframe. It receives tool data from the Host and can call server tools or send messages back to the chat.
 
-The View acts as an MCP client, the Host acts as a proxy, and the Server is a standard MCP server.
+The View's `App` subclasses the base MCP SDK `Client`. The Host's `AppBridge`
+subclasses the base MCP SDK `Server` for the inner iframe channel, while a
+separate outer `Client` connects the Host to the actual MCP Server. Keeping
+those two connections separate prevents iframe negotiation and capabilities
+from leaking into the server connection.
 
 ## Lifecycle
 
@@ -93,7 +97,7 @@ sequenceDiagram
 ```
 
 1. **Discovery** — The Host learns about tools and their UI resources when connecting to the server.
-2. **Initialization** — When a UI tool is called, the Host renders the iframe. The View sends `ui/initialize` and receives host context (theme, capabilities, container dimensions). This handshake ensures the View is ready before receiving data.
+2. **Initialization** — When a UI tool is called, the Host renders the iframe. The SDK first completes its temporary inner base MCP handshake, then the View sends `ui/initialize` and receives host context (theme, capabilities, container dimensions). `ui/initialize` remains authoritative for Apps capabilities and identity, and `ui/notifications/initialized` remains the public View-ready signal.
 3. **Data delivery** — The Host sends tool arguments and, once available, tool results to the View. Results include both `content` (text for the model's context) and optionally `structuredContent` (data optimized for UI rendering). This separation lets servers provide rich data to the UI without bloating the model's context.
 4. **Interactive phase** — The user interacts with the View. The View can call tools, send messages, or update context.
 5. **Teardown** — Before unmounting, the Host notifies the View so it can save state or release resources.
