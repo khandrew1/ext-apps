@@ -37,6 +37,7 @@ function buildJs(
 const PEER_EXTERNALS = [
   "@modelcontextprotocol/client",
   "@modelcontextprotocol/core",
+  "@modelcontextprotocol/core/protocol",
   "@modelcontextprotocol/server",
   "zod",
 ];

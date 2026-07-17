@@ -32,6 +32,7 @@ const config = {
   excludePrivate: true,
   excludeInternal: false,
   intentionallyNotExported: [
+    "src/events.ts:ProtocolEventSchemas",
     "src/server/index.ts:ZodRawShape",
     "src/server/index.ts:AppToolCallback",
   ],
@@ -51,6 +52,14 @@ const config = {
       "SdkErrorCode.MethodNotSupportedByProtocolVersion": V2_SDK_DOCS,
       TransportSendOptions: V2_SDK_DOCS,
       "__type.enforceStrictCapabilities": V2_SDK_DOCS,
+    },
+    "@modelcontextprotocol/core": {
+      "MessageExtraInfo.classification": V2_SDK_DOCS,
+      "Protocol.close": V2_SDK_DOCS,
+      "Protocol.notification": V2_SDK_DOCS,
+      "SdkErrorCode.UnsupportedResultType": V2_SDK_DOCS,
+      Transport: V2_SDK_DOCS,
+      TransportSendOptions: V2_SDK_DOCS,
     },
     "@modelcontextprotocol/server": {
       LoggingMessageNotification: V2_SDK_DOCS,

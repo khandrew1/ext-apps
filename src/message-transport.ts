@@ -1,10 +1,10 @@
 import {
-  type JSONRPCMessage,
   type MessageExtraInfo,
   type Transport,
   type TransportSendOptions,
-} from "@modelcontextprotocol/client";
+} from "@modelcontextprotocol/core/protocol";
 import { JSONRPCMessageSchema } from "@modelcontextprotocol/core";
+import type { JSONRPCMessage } from "./mcp-types";
 import { TOOL_INPUT_PARTIAL_METHOD } from "./spec.types";
 
 /**
@@ -13,7 +13,7 @@ import { TOOL_INPUT_PARTIAL_METHOD } from "./spec.types";
  * This transport enables bidirectional communication between MCP Apps running in
  * iframes and their host applications using the browser's `postMessage` API. It
  * implements the MCP TypeScript SDK `Transport` interface from
- * `@modelcontextprotocol/client` (also used by `@modelcontextprotocol/server`).
+ * `@modelcontextprotocol/core` (also used by the role packages).
  * Optional v2 members ({@link hasPerRequestStream},
  * {@link setSupportedProtocolVersions}) and extended
  * {@link TransportSendOptions} fields are accepted but unused — postMessage is

@@ -144,6 +144,7 @@ import type {
   CreateMessageResult,
   CreateMessageResultWithTools,
   EmptyResult,
+  Implementation,
   ListPromptsRequest,
   ListPromptsResult,
   ListResourcesRequest,
@@ -158,10 +159,11 @@ import type {
   ReadResourceRequest,
   ReadResourceResult,
   ResourceListChangedNotification,
+  ServerCapabilities,
   Tool,
   ToolAnnotations,
   ToolListChangedNotification,
-} from "@modelcontextprotocol/client";
+} from "./mcp-types";
 
 export type {
   CallToolRequest,
@@ -170,6 +172,7 @@ export type {
   CreateMessageResult,
   CreateMessageResultWithTools,
   EmptyResult,
+  Implementation,
   ListPromptsRequest,
   ListPromptsResult,
   ListResourcesRequest,
@@ -184,6 +187,7 @@ export type {
   ReadResourceRequest,
   ReadResourceResult,
   ResourceListChangedNotification,
+  ServerCapabilities,
   Tool,
   ToolAnnotations,
   ToolListChangedNotification,

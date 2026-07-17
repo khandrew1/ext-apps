@@ -2,10 +2,9 @@
  * Phase 3 regression guards for the v2 SDK migration.
  *
  * Load-bearing invariant: the view↔host iframe link must NEVER negotiate an
- * MCP protocol version. App.connect() sets a synthetic transport.sessionId
- * before super.connect() so v2 Client.connect() takes the session-resumption
- * path and skips MCP initialize. If a modern (2026-07-28) era were negotiated,
- * Client._shouldDropInbound would silently drop ALL inbound requests on App.
+ * MCP protocol version. App and AppBridge extend the role-neutral Protocol,
+ * whose connect() only wires the transport; ui/initialize remains the sole
+ * handshake on this channel.
  *
  * Coverage note (vs src/app-bridge.test.ts):
  * - Teardown round-trips, bridge→app ping, registerTool/listTools/callTool,
@@ -105,11 +104,11 @@ describe("v2 invariants — no MCP negotiation on App↔AppBridge", () => {
     delete (globalThis as { window?: unknown }).window;
   });
 
-  it("keeps negotiated protocol version undefined after ui/initialize", () => {
-    expect(app.getNegotiatedProtocolVersion()).toBeUndefined();
-    expect(app.getServerCapabilities()).toBeUndefined();
-    expect(bridge.getNegotiatedProtocolVersion()).toBeUndefined();
-    expect(bridge.getClientCapabilities()).toBeUndefined();
+  it("negotiates only UI capabilities after ui/initialize", () => {
+    expect(app.getHostCapabilities()).toEqual(testHostCapabilities);
+    expect(bridge.getAppCapabilities()).toEqual({
+      tools: { listChanged: true },
+    });
   });
 
   it("never sends MCP initialize or notifications/initialized on the wire", () => {

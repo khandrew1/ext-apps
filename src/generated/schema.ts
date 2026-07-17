@@ -10,7 +10,7 @@ import type {
   RequestId,
   ResourceLink,
   Tool,
-} from "@modelcontextprotocol/client";
+} from "../mcp-types";
 import {
   ContentBlockSchema as ContentBlockSchemaFromCore,
   CallToolResultSchema as CallToolResultSchemaFromCore,
@@ -22,18 +22,19 @@ import {
 } from "@modelcontextprotocol/core";
 
 const ContentBlockSchema: z.ZodType<ContentBlock> =
-  ContentBlockSchemaFromCore as z.ZodType<ContentBlock>;
+  ContentBlockSchemaFromCore as unknown as z.ZodType<ContentBlock>;
 const CallToolResultSchema: z.ZodType<CallToolResult> =
-  CallToolResultSchemaFromCore as z.ZodType<CallToolResult>;
+  CallToolResultSchemaFromCore as unknown as z.ZodType<CallToolResult>;
 const EmbeddedResourceSchema: z.ZodType<EmbeddedResource> =
-  EmbeddedResourceSchemaFromCore as z.ZodType<EmbeddedResource>;
+  EmbeddedResourceSchemaFromCore as unknown as z.ZodType<EmbeddedResource>;
 const ImplementationSchema: z.ZodType<Implementation> =
-  ImplementationSchemaFromCore as z.ZodType<Implementation>;
+  ImplementationSchemaFromCore as unknown as z.ZodType<Implementation>;
 const RequestIdSchema: z.ZodType<RequestId> =
-  RequestIdSchemaFromCore as z.ZodType<RequestId>;
+  RequestIdSchemaFromCore as unknown as z.ZodType<RequestId>;
 const ResourceLinkSchema: z.ZodType<ResourceLink> =
-  ResourceLinkSchemaFromCore as z.ZodType<ResourceLink>;
-const ToolSchema: z.ZodType<Tool> = ToolSchemaFromCore as z.ZodType<Tool>;
+  ResourceLinkSchemaFromCore as unknown as z.ZodType<ResourceLink>;
+const ToolSchema: z.ZodType<Tool> =
+  ToolSchemaFromCore as unknown as z.ZodType<Tool>;
 
 /**
  * @description Color theme preference for the host environment.
