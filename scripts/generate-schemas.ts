@@ -104,7 +104,7 @@ const EXTERNAL_TYPE_SCHEMAS = [
 const MCP_SCHEMA_PACKAGE = "@modelcontextprotocol/core";
 
 /** v2 TypeScript types package — matches imports in spec.types.ts. */
-const MCP_TYPES_PACKAGE = "@modelcontextprotocol/client";
+const MCP_TYPES_PACKAGE = "../mcp-types";
 
 async function main() {
   console.log("🔧 Generating Zod schemas from spec.types.ts...\n");
@@ -213,15 +213,17 @@ function postProcess(content: string): string {
   // schema instances throws at parse time. See header comment for details.
   //
   // Import schemas from @modelcontextprotocol/core, then re-bind as
-  // z.ZodType<T> with T from @modelcontextprotocol/client so .d.ts emit does
-  // not try to name core-internal aliases (JSONObject → TS4023).
+  // z.ZodType<T> with role-neutral types from the public Protocol entry so
+  // .d.ts emit does not try to name core-internal aliases (JSONObject → TS4023).
+  // The intermediate `unknown` prevents TypeScript from recursively comparing
+  // the SDK's full Zod schema graph during this intentional re-binding.
   const typeImports = EXTERNAL_TYPE_SCHEMAS.map((e) => e.type).join(",\n  ");
   const schemaImports = EXTERNAL_TYPE_SCHEMAS.map(
     (e) => `${e.schema} as ${e.schema}FromCore`,
   ).join(",\n  ");
   const schemaBindings = EXTERNAL_TYPE_SCHEMAS.map(
     (e) =>
-      `const ${e.schema}: z.ZodType<${e.type}> = ${e.schema}FromCore as z.ZodType<${e.type}>;`,
+      `const ${e.schema}: z.ZodType<${e.type}> = ${e.schema}FromCore as unknown as z.ZodType<${e.type}>;`,
   ).join("\n");
 
   content = content.replace(

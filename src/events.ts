@@ -1,47 +1,167 @@
-/**
- * DOM-style notification event fan-out and double-set protection for
- * {@link App} / {@link AppBridge}, composed onto v2 Client/Server rather than
- * subclassing Protocol.
- *
- * ### Singular `on*` handler (like `el.onclick`)
- *
- * Assigning replaces the previous handler; assigning `undefined` clears it.
- * `addEventListener` listeners are unaffected.
- *
- * ### Multi-listener (`addEventListener` / `removeEventListener`)
- *
- * Append to a per-event listener array. Listeners fire in insertion order
- * after the singular `on*` handler.
- *
- * ### Dispatch order
- *
- * 1. Optional `onDispatch` side-effects (e.g. merge host context)
- * 2. The singular `on*` handler (if set)
- * 3. All `addEventListener` listeners in insertion order
- *
- * ### Double-set protection
- *
- * {@link MethodClaimRegistry} tracks methods claimed by event registration or
- * internal handlers. App/AppBridge shadow `setRequestHandler` /
- * `setNotificationHandler` to throw when the same method is claimed twice.
- */
+import { Protocol } from "@modelcontextprotocol/core/protocol";
+import type {
+  BaseContext,
+  StandardSchemaV1,
+} from "@modelcontextprotocol/core/protocol";
 
-import type { StandardSchemaV1 } from "@modelcontextprotocol/client";
+export type ProtocolEventSchemas<EventMap extends Record<string, unknown>> = {
+  [K in keyof EventMap]: {
+    method: string;
+    params: StandardSchemaV1;
+  };
+};
+
+interface EventSlot<T = unknown> {
+  onHandler?: ((params: T) => void) | undefined;
+  listeners: ((params: T) => void)[];
+}
 
 /**
- * Request-handler context passed to App/AppBridge `on*` request callbacks.
+ * Intermediate base class that adds DOM-style event support on top of the
+ * role-neutral MCP SDK `Protocol` engine.
  *
- * Preserves the v1-era `extra.signal` surface used by hosts and examples.
- * Mapped internally from the v2 handler context (`ctx`).
+ * Subclasses provide a map from event names to generated v2 notification
+ * schemas. The first listener for an event installs one Protocol notification
+ * handler, which fans out to the singular `on*` handler and all listeners.
+ * Direct handler registration remains double-set protected.
  */
+export abstract class ProtocolWithEvents<
+  ContextT extends BaseContext,
+  EventMap extends Record<string, unknown>,
+> extends Protocol<ContextT> {
+  private readonly _registeredMethods = new Set<string>();
+  private readonly _eventSlots = new Map<keyof EventMap, EventSlot>();
+
+  protected abstract readonly eventSchemas: ProtocolEventSchemas<EventMap>;
+
+  protected onEventDispatch<K extends keyof EventMap>(
+    _event: K,
+    _params: EventMap[K],
+  ): void {}
+
+  private _ensureEventSlot<K extends keyof EventMap>(
+    event: K,
+  ): EventSlot<EventMap[K]> {
+    let slot = this._eventSlots.get(event) as
+      EventSlot<EventMap[K]> | undefined;
+    if (!slot) {
+      const schema = this.eventSchemas[event];
+      if (!schema) {
+        throw new Error(`Unknown event: ${String(event)}`);
+      }
+
+      slot = { listeners: [] };
+      this._eventSlots.set(event, slot as EventSlot);
+
+      this._registeredMethods.add(schema.method);
+      const stableSlot = slot;
+      super.setNotificationHandler(
+        schema.method,
+        { params: schema.params },
+        (params) => {
+          const eventParams = params as EventMap[K];
+          this.onEventDispatch(event, eventParams);
+          stableSlot.onHandler?.(eventParams);
+          for (const listener of [...stableSlot.listeners]) {
+            listener(eventParams);
+          }
+        },
+      );
+    }
+    return slot;
+  }
+
+  protected setEventHandler<K extends keyof EventMap>(
+    event: K,
+    handler: ((params: EventMap[K]) => void) | undefined,
+  ): void {
+    const slot = this._ensureEventSlot(event);
+    if (slot.onHandler && handler) {
+      console.warn(
+        `[MCP Apps] on${String(event)} handler replaced. ` +
+          `Use addEventListener("${String(event)}", …) to add multiple listeners without replacing.`,
+      );
+    }
+    slot.onHandler = handler;
+  }
+
+  protected getEventHandler<K extends keyof EventMap>(
+    event: K,
+  ): ((params: EventMap[K]) => void) | undefined {
+    return (this._eventSlots.get(event) as EventSlot<EventMap[K]> | undefined)
+      ?.onHandler;
+  }
+
+  addEventListener<K extends keyof EventMap>(
+    event: K,
+    handler: (params: EventMap[K]) => void,
+  ): void {
+    this._ensureEventSlot(event).listeners.push(handler);
+  }
+
+  removeEventListener<K extends keyof EventMap>(
+    event: K,
+    handler: (params: EventMap[K]) => void,
+  ): void {
+    const slot = this._eventSlots.get(event) as
+      EventSlot<EventMap[K]> | undefined;
+    if (!slot) return;
+    const index = slot.listeners.indexOf(handler);
+    if (index !== -1) slot.listeners.splice(index, 1);
+  }
+
+  // Arrow fields intentionally initialize after Protocol's constructor. Its
+  // built-in ping/cancelled/progress registrations therefore reach the base
+  // methods before our duplicate-registration state exists.
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  override setRequestHandler = (...args: any[]): void => {
+    const method = args[0] as string;
+    this._assertMethodNotRegistered(method, "setRequestHandler");
+    (Protocol.prototype.setRequestHandler as Function).apply(this, args);
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  override setNotificationHandler = (...args: any[]): void => {
+    const method = args[0] as string;
+    this._assertMethodNotRegistered(method, "setNotificationHandler");
+    (Protocol.prototype.setNotificationHandler as Function).apply(this, args);
+  };
+
+  /**
+   * Replace a request handler while retaining `on*` replace semantics.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  protected replaceRequestHandler = (...args: any[]): void => {
+    this._registeredMethods.add(args[0] as string);
+    (Protocol.prototype.setRequestHandler as Function).apply(this, args);
+  };
+
+  protected warnIfRequestHandlerReplaced(
+    name: string,
+    previous: unknown,
+    next: unknown,
+  ): void {
+    warnIfRequestHandlerReplaced(name, previous, next);
+  }
+
+  private _assertMethodNotRegistered(method: string, via: string): void {
+    if (this._registeredMethods.has(method)) {
+      throw new Error(
+        `Handler for "${method}" already registered (via ${via}). ` +
+          `Use addEventListener() to attach multiple listeners, ` +
+          `or the on* setter for replace semantics.`,
+      );
+    }
+    this._registeredMethods.add(method);
+  }
+}
+
 export type RequestHandlerExtra = {
   signal: AbortSignal;
   sessionId?: string;
 };
 
-/**
- * Adapt v2 handler context to the public `extra` shape.
- */
 export function toRequestHandlerExtra(ctx: {
   sessionId?: string;
   mcpReq: { signal: AbortSignal };
@@ -52,9 +172,6 @@ export function toRequestHandlerExtra(ctx: {
   };
 }
 
-/**
- * Deep-merge capability objects (replaces v1 `mergeCapabilities`).
- */
 export function mergeCapabilities<T extends object>(base: T, additional: T): T {
   const result = { ...(base as Record<string, unknown>) };
   for (const [key, value] of Object.entries(additional)) {
@@ -78,145 +195,6 @@ export function mergeCapabilities<T extends object>(base: T, additional: T): T {
   return result as T;
 }
 
-/**
- * Tracks JSON-RPC methods claimed by event registration or internal handlers
- * so accidental double-registration via `setRequestHandler` /
- * `setNotificationHandler` throws instead of silently replacing.
- */
-export class MethodClaimRegistry {
-  private readonly _methods = new Set<string>();
-
-  /** Record a claim without throwing (replace / first-register paths). */
-  claim(method: string): void {
-    this._methods.add(method);
-  }
-
-  /** Throw if already claimed, then claim. */
-  assertAndClaim(method: string, via: string): void {
-    if (this._methods.has(method)) {
-      throw new Error(
-        `Handler for "${method}" already registered (via ${via}). ` +
-          `Use addEventListener() to attach multiple listeners, ` +
-          `or the on* setter for replace semantics.`,
-      );
-    }
-    this._methods.add(method);
-  }
-
-  has(method: string): boolean {
-    return this._methods.has(method);
-  }
-}
-
-interface EventSlot<T = unknown> {
-  onHandler?: ((params: T) => void) | undefined;
-  listeners: ((params: T) => void)[];
-}
-
-export type EventMethodSchema = {
-  method: string;
-  params: StandardSchemaV1;
-};
-
-/**
- * Registers one v2 notification handler per event method and fans out to
- * `on*` + `addEventListener` listeners.
- */
-export class NotificationEventEmitter<
-  EventMap extends Record<string, unknown>,
-> {
-  private readonly _eventSlots = new Map<keyof EventMap, EventSlot>();
-
-  constructor(
-    private readonly _eventSchemas: {
-      [K in keyof EventMap]: EventMethodSchema;
-    },
-    /**
-     * Called once per event on first use. Must register a v2
-     * `setNotificationHandler(method, { params }, handler)` and claim the
-     * method in the caller's {@link MethodClaimRegistry}.
-     */
-    private readonly _registerDispatcher: (
-      method: string,
-      paramsSchema: StandardSchemaV1,
-      dispatch: (params: unknown) => void,
-    ) => void,
-    private readonly _onDispatch?: <K extends keyof EventMap>(
-      event: K,
-      params: EventMap[K],
-    ) => void,
-  ) {}
-
-  private _ensureEventSlot<K extends keyof EventMap>(
-    event: K,
-  ): EventSlot<EventMap[K]> {
-    let slot = this._eventSlots.get(event) as
-      | EventSlot<EventMap[K]>
-      | undefined;
-    if (!slot) {
-      const schema = this._eventSchemas[event];
-      if (!schema) {
-        throw new Error(`Unknown event: ${String(event)}`);
-      }
-      slot = { listeners: [] };
-      this._eventSlots.set(event, slot as EventSlot);
-
-      const s = slot;
-      this._registerDispatcher(schema.method, schema.params, (params) => {
-        const p = params as EventMap[K];
-        this._onDispatch?.(event, p);
-        s.onHandler?.(p);
-        for (const l of [...s.listeners]) l(p);
-      });
-    }
-    return slot;
-  }
-
-  setEventHandler<K extends keyof EventMap>(
-    event: K,
-    handler: ((params: EventMap[K]) => void) | undefined,
-  ): void {
-    const slot = this._ensureEventSlot(event);
-    if (slot.onHandler && handler) {
-      console.warn(
-        `[MCP Apps] on${String(event)} handler replaced. ` +
-          `Use addEventListener("${String(event)}", …) to add multiple listeners without replacing.`,
-      );
-    }
-    slot.onHandler = handler;
-  }
-
-  getEventHandler<K extends keyof EventMap>(
-    event: K,
-  ): ((params: EventMap[K]) => void) | undefined {
-    return (this._eventSlots.get(event) as EventSlot<EventMap[K]> | undefined)
-      ?.onHandler;
-  }
-
-  addEventListener<K extends keyof EventMap>(
-    event: K,
-    handler: (params: EventMap[K]) => void,
-  ): void {
-    this._ensureEventSlot(event).listeners.push(handler);
-  }
-
-  removeEventListener<K extends keyof EventMap>(
-    event: K,
-    handler: (params: EventMap[K]) => void,
-  ): void {
-    const slot = this._eventSlots.get(event) as
-      | EventSlot<EventMap[K]>
-      | undefined;
-    if (!slot) return;
-    const idx = slot.listeners.indexOf(handler);
-    if (idx !== -1) slot.listeners.splice(idx, 1);
-  }
-}
-
-/**
- * Warn if a request-handler `on*` setter is replacing a previously-set
- * handler. Call from each request setter before updating the backing field.
- */
 export function warnIfRequestHandlerReplaced(
   name: string,
   previous: unknown,
@@ -230,25 +208,6 @@ export function warnIfRequestHandlerReplaced(
   }
 }
 
-/**
- * Extract the `params` Zod schema from a generated `{ method, params }` schema.
- */
-export function paramsSchemaOf<
-  S extends { shape: { params: StandardSchemaV1 } },
->(schema: S): S["shape"]["params"] {
-  return schema.shape.params;
-}
-
-/**
- * Extract the literal method string from a generated `{ method, params }` schema.
- */
-export function methodOf<
-  S extends { shape: { method: { value?: string; values?: Set<string> } } },
->(schema: S): string {
-  const method = schema.shape.method;
-  if (typeof method.value === "string") return method.value;
-  if (method.values && method.values.size > 0) {
-    return method.values.values().next().value as string;
-  }
-  throw new Error("Could not extract method literal from schema");
+export function paramsSchemaOf(schema: unknown): StandardSchemaV1 {
+  return (schema as { shape: { params: StandardSchemaV1 } }).shape.params;
 }

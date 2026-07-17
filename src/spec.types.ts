@@ -18,7 +18,7 @@ import type {
   RequestId,
   ResourceLink,
   Tool,
-} from "@modelcontextprotocol/client";
+} from "./mcp-types";
 
 /**
  * Current protocol version supported by this SDK.
