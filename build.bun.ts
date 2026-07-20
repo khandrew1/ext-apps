@@ -1,9 +1,13 @@
 #!/usr/bin/env bun
 import { $ } from "bun";
-import { cpSync, mkdirSync } from "node:fs";
+import { cpSync, mkdirSync, rmSync } from "node:fs";
+
+// Avoid publishing declarations left behind by a previous broader build.
+rmSync("dist", { recursive: true, force: true });
 
 // Run TypeScript compiler for type declarations
-await $`tsc`;
+await $`tsc --noEmit`;
+await $`tsc -p tsconfig.build.json`;
 
 // Copy schema.json (tsc is emitDeclarationOnly, Bun.build doesn't emit JSON assets).
 // Needed for the "./schema.json" package export.
@@ -34,12 +38,7 @@ function buildJs(
 // Peer dependencies stay external in the standard entry points so consumers
 // share one base MCP SDK and Zod instance. The *-with-deps entry points keep
 // bundling these dependencies for standalone browser use.
-const PEER_EXTERNALS = [
-  "@modelcontextprotocol/client",
-  "@modelcontextprotocol/core",
-  "@modelcontextprotocol/server",
-  "zod",
-];
+const PEER_EXTERNALS = ["@modelcontextprotocol/core", "zod"];
 
 await Promise.all([
   buildJs("src/app.ts", {

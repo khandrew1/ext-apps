@@ -4,6 +4,7 @@ import { Server, type ServerCapabilities } from "@modelcontextprotocol/server";
 import { z } from "zod/v4";
 
 import { App } from "./app";
+import type { McpClientLike } from "./mcp-types";
 import { LATEST_PROTOCOL_VERSION } from "./types";
 import {
   AppBridge,
@@ -24,13 +25,7 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
  */
 function createMockClient(
   serverCapabilities: ServerCapabilities = {},
-): Pick<
-  Client,
-  | "getServerCapabilities"
-  | "request"
-  | "notification"
-  | "setNotificationHandler"
-> {
+): McpClientLike {
   return {
     getServerCapabilities: () => serverCapabilities,
     request: async () => ({}) as never,
@@ -57,7 +52,7 @@ describe("App <-> AppBridge integration", () => {
     [appTransport, bridgeTransport] = InMemoryTransport.createLinkedPair();
     app = new App(testAppInfo, {}, { autoResize: false });
     bridge = new AppBridge(
-      createMockClient() as Client,
+      createMockClient(),
       testHostInfo,
       testHostCapabilities,
     );
@@ -82,7 +77,7 @@ describe("App <-> AppBridge integration", () => {
       expect(initializedFired).toBe(true);
     });
 
-    it("keeps standard initialization separate from the Apps-ready gate", async () => {
+    it("uses the Apps handshake as the only initialization gate", async () => {
       const methods: string[] = [];
       let releaseAppsInitialized!: () => void;
       let reachedAppsInitialized!: () => void;
@@ -115,14 +110,9 @@ describe("App <-> AppBridge integration", () => {
       await reachedGate;
 
       expect(methods).toEqual([
-        "initialize",
-        "notifications/initialized",
         "ui/initialize",
         "ui/notifications/initialized",
       ]);
-      expect(app.getNegotiatedProtocolVersion()).toBe("2025-11-25");
-      expect(bridge.getNegotiatedProtocolVersion()).toBe("2025-11-25");
-      expect(bridge.getClientVersion()).toEqual(testAppInfo);
       expect(bridge.getAppVersion()).toEqual(testAppInfo);
       expect(singularCalls).toBe(0);
       expect(listenerCalls).toBe(0);
@@ -144,7 +134,6 @@ describe("App <-> AppBridge integration", () => {
       const hostCaps = app.getHostCapabilities();
       expect(hostCaps).toEqual(testHostCapabilities);
       expect(bridge.getHostCapabilities()).toEqual(testHostCapabilities);
-      expect(bridge.getCapabilities()).toEqual({});
     });
 
     it("Bridge receives app info and capabilities after initialization", async () => {
@@ -172,7 +161,7 @@ describe("App <-> AppBridge integration", () => {
         containerDimensions: { width: 800, maxHeight: 600 },
       };
       const newBridge = new AppBridge(
-        createMockClient() as Client,
+        createMockClient(),
         testHostInfo,
         testHostCapabilities,
         { hostContext: testHostContext },
@@ -316,7 +305,7 @@ describe("App <-> AppBridge integration", () => {
         locale: "en-US",
       };
       const newBridge = new AppBridge(
-        createMockClient() as Client,
+        createMockClient(),
         testHostInfo,
         testHostCapabilities,
         { hostContext: initialContext },
@@ -359,7 +348,7 @@ describe("App <-> AppBridge integration", () => {
         locale: "en-US",
       };
       const newBridge = new AppBridge(
-        createMockClient() as Client,
+        createMockClient(),
         testHostInfo,
         testHostCapabilities,
         { hostContext: initialContext },
@@ -396,7 +385,7 @@ describe("App <-> AppBridge integration", () => {
         containerDimensions: { width: 800, maxHeight: 600 },
       };
       const newBridge = new AppBridge(
-        createMockClient() as Client,
+        createMockClient(),
         testHostInfo,
         testHostCapabilities,
         { hostContext: initialContext },
@@ -1801,12 +1790,12 @@ describe("App <-> AppBridge integration", () => {
           InMemoryTransport.createLinkedPair();
 
         const bridge1 = new AppBridge(
-          createMockClient() as Client,
+          createMockClient(),
           testHostInfo,
           testHostCapabilities,
         );
         const bridge2 = new AppBridge(
-          createMockClient() as Client,
+          createMockClient(),
           testHostInfo,
           testHostCapabilities,
         );
@@ -2138,7 +2127,7 @@ describe("App <-> AppBridge integration", () => {
           const [strictAppT, strictBridgeT] =
             InMemoryTransport.createLinkedPair();
           const strictBridge = new AppBridge(
-            createMockClient() as Client,
+            createMockClient(),
             testHostInfo,
             testHostCapabilities,
           );
@@ -2883,7 +2872,7 @@ describe("isToolVisibilityAppOnly", () => {
       [appTransport, bridgeTransport] = InMemoryTransport.createLinkedPair();
       app = new App(testAppInfo, {}, { autoResize: false });
       bridge = new AppBridge(
-        createMockClient() as Client,
+        createMockClient(),
         testHostInfo,
         testHostCapabilities,
       );
@@ -3016,7 +3005,7 @@ describe("isToolVisibilityAppOnly", () => {
 
     it("direct setRequestHandler uses base SDK replacement semantics", () => {
       const bridge2 = new AppBridge(
-        createMockClient() as Client,
+        createMockClient(),
         testHostInfo,
         testHostCapabilities,
       );

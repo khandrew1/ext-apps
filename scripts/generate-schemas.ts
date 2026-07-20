@@ -196,6 +196,50 @@ import {
 } from "@modelcontextprotocol/core";`,
   );
 
+  // Give declaration emit a stable local name for ToolSchema's recursive JSON
+  // value type instead of reaching into a role package or core's internals.
+  content = content.replace(
+    '} from "@modelcontextprotocol/core";',
+    `} from "@modelcontextprotocol/core";
+import type {
+  CallToolResult,
+  ContentBlock,
+  EmbeddedResource,
+  Implementation,
+  RequestId,
+  ResourceLink,
+  Tool,
+} from "../mcp-types.js";`,
+  );
+  const namedExternalSchemas = {
+    CallToolResult: ["CallToolResultSchema.describe("],
+    ContentBlock: ["z.array(ContentBlockSchema)"],
+    Implementation: ["ImplementationSchema.describe("],
+    RequestId: ["RequestIdSchema.optional("],
+    Tool: ["ToolSchema.describe("],
+  } as const;
+  for (const [type, patterns] of Object.entries(namedExternalSchemas)) {
+    for (const pattern of patterns) {
+      if (pattern.startsWith("z.array(")) {
+        content = content.replaceAll(
+          pattern,
+          `z.array(ContentBlockSchema as z.ZodType<${type}>)`,
+        );
+      } else {
+        const schema = pattern.slice(0, pattern.indexOf("."));
+        const method = pattern.slice(pattern.indexOf("."));
+        content = content.replaceAll(
+          pattern,
+          `(${schema} as z.ZodType<${type}>)${method}`,
+        );
+      }
+    }
+  }
+  content = content.replaceAll(
+    "z.union([EmbeddedResourceSchema, ResourceLinkSchema])",
+    "z.union([EmbeddedResourceSchema as z.ZodType<EmbeddedResource>, ResourceLinkSchema as z.ZodType<ResourceLink>])",
+  );
+
   // 2. Remove z.any() placeholders for external types (now imported from MCP SDK)
   for (const schema of EXTERNAL_TYPE_SCHEMAS) {
     content = content.replace(

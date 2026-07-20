@@ -4,7 +4,7 @@ import type {
   MessageExtraInfo,
   Transport,
   TransportSendOptions,
-} from "@modelcontextprotocol/client";
+} from "./mcp-types";
 import { TOOL_INPUT_PARTIAL_METHOD } from "./spec.types";
 
 /**
