@@ -32,29 +32,63 @@
  */
 
 import {
-  RESOURCE_URI_META_KEY,
-  RESOURCE_MIME_TYPE,
   McpUiResourceCsp,
   McpUiResourceMeta,
   McpUiToolMeta,
   McpUiClientCapabilities,
-} from "../app.js";
+} from "../types.js";
+import { RESOURCE_URI_META_KEY, RESOURCE_MIME_TYPE } from "../constants.js";
 import type {
   ClientCapabilities,
-  McpServer,
   ReadResourceResult,
-  RegisteredTool,
-  ResourceMetadata,
-  StandardSchemaWithJSON,
   ToolAnnotations,
-  ToolCallback,
-  ReadResourceCallback as _ReadResourceCallback,
-  RegisteredResource,
-} from "@modelcontextprotocol/server";
+} from "../mcp-types.js";
+import type { StandardSchemaWithJSON } from "../standard-schema.js";
+
+export interface ResourceMetadata {
+  title?: string;
+  description?: string;
+  mimeType?: string;
+  size?: number;
+  icons?: Array<Record<string, unknown>>;
+  _meta?: Record<string, unknown>;
+}
+
+export type ToolCallback<
+  Args extends StandardSchemaWithJSON | undefined = undefined,
+> = Args extends StandardSchemaWithJSON
+  ? (args: StandardSchemaWithJSON.InferOutput<Args>, context: any) => any
+  : (context: any) => any;
+
+export interface RegisteredTool {
+  enabled: boolean;
+  enable(): void;
+  disable(): void;
+  update(updates: any): void;
+  remove(): void;
+}
+
+export interface RegisteredResource {
+  enabled: boolean;
+  enable(): void;
+  disable(): void;
+  update(updates: any): void;
+  remove(): void;
+}
+
+/** Structural server surface used by the registration helpers. */
+export interface McpServerLike {
+  registerTool(name: string, config: any, callback: any): RegisteredTool;
+  registerResource(
+    name: string,
+    uri: string,
+    config: any,
+    callback: any,
+  ): RegisteredResource;
+}
 
 // Re-exports for convenience
 export { RESOURCE_URI_META_KEY, RESOURCE_MIME_TYPE };
-export type { ResourceMetadata, ToolCallback };
 
 /**
  * Base tool configuration matching the standard MCP server tool options.
@@ -211,7 +245,7 @@ export function registerAppTool<
   OutputArgs extends StandardSchemaWithJSON,
   InputArgs extends StandardSchemaWithJSON | undefined = undefined,
 >(
-  server: Pick<McpServer, "registerTool">,
+  server: Pick<McpServerLike, "registerTool">,
   name: string,
   config: McpUiAppToolConfig & {
     inputSchema?: InputArgs;
@@ -246,7 +280,7 @@ export type McpUiReadResourceResult = ReadResourceResult & {
 };
 export type McpUiReadResourceCallback = (
   uri: URL,
-  extra: Parameters<_ReadResourceCallback>[1],
+  extra: any,
 ) => McpUiReadResourceResult | Promise<McpUiReadResourceResult>;
 export type ReadResourceCallback = McpUiReadResourceCallback;
 
@@ -364,7 +398,7 @@ export type ReadResourceCallback = McpUiReadResourceCallback;
  * @see {@link registerAppTool `registerAppTool`} to register tools that reference this resource
  */
 export function registerAppResource(
-  server: Pick<McpServer, "registerResource">,
+  server: Pick<McpServerLike, "registerResource">,
   name: string,
   uri: string,
   config: McpUiAppResourceConfig,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Implementation } from "@modelcontextprotocol/client";
+import type { Implementation } from "../mcp-types";
 import {
   App,
   AppOptions,

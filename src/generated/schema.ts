@@ -11,6 +11,15 @@ import {
   ResourceLinkSchema,
   ToolSchema,
 } from "@modelcontextprotocol/core";
+import type {
+  CallToolResult,
+  ContentBlock,
+  EmbeddedResource,
+  Implementation,
+  RequestId,
+  ResourceLink,
+  Tool,
+} from "../mcp-types.js";
 
 /**
  * @description Color theme preference for the host environment.
@@ -777,7 +786,12 @@ export const McpUiDownloadFileRequestSchema = z.object({
   params: z.object({
     /** @description Resource contents to download — embedded (inline data) or linked (host fetches). Uses standard MCP resource types. */
     contents: z
-      .array(z.union([EmbeddedResourceSchema, ResourceLinkSchema]))
+      .array(
+        z.union([
+          EmbeddedResourceSchema as z.ZodType<EmbeddedResource>,
+          ResourceLinkSchema as z.ZodType<ResourceLink>,
+        ]),
+      )
       .describe(
         "Resource contents to download \u2014 embedded (inline data) or linked (host fetches). Uses standard MCP resource types.",
       ),
@@ -797,7 +811,7 @@ export const McpUiMessageRequestSchema = z.object({
       .describe('Message role, currently only "user" is supported.'),
     /** @description Message content blocks (text, image, etc.). */
     content: z
-      .array(ContentBlockSchema)
+      .array(ContentBlockSchema as z.ZodType<ContentBlock>)
       .describe("Message content blocks (text, image, etc.)."),
   }),
 });
@@ -834,7 +848,9 @@ export const McpUiSandboxResourceReadyNotificationSchema = z.object({
 export const McpUiToolResultNotificationSchema = z.object({
   method: z.literal("ui/notifications/tool-result"),
   /** @description Standard MCP tool execution result. */
-  params: CallToolResultSchema.describe("Standard MCP tool execution result."),
+  params: (CallToolResultSchema as z.ZodType<CallToolResult>).describe(
+    "Standard MCP tool execution result.",
+  ),
 });
 
 /**
@@ -846,11 +862,11 @@ export const McpUiHostContextSchema = z
     toolInfo: z
       .object({
         /** @description JSON-RPC id of the tools/call request. */
-        id: RequestIdSchema.optional().describe(
-          "JSON-RPC id of the tools/call request.",
-        ),
+        id: (RequestIdSchema as z.ZodType<RequestId>)
+          .optional()
+          .describe("JSON-RPC id of the tools/call request."),
         /** @description Tool definition including name, inputSchema, etc. */
-        tool: ToolSchema.describe(
+        tool: (ToolSchema as z.ZodType<Tool>).describe(
           "Tool definition including name, inputSchema, etc.",
         ),
       })
@@ -986,7 +1002,7 @@ export const McpUiUpdateModelContextRequestSchema = z.object({
   params: z.object({
     /** @description Context content blocks (text, image, etc.). */
     content: z
-      .array(ContentBlockSchema)
+      .array(ContentBlockSchema as z.ZodType<ContentBlock>)
       .optional()
       .describe("Context content blocks (text, image, etc.)."),
     /** @description Structured content for machine-readable context data. */
@@ -1010,7 +1026,7 @@ export const McpUiInitializeRequestSchema = z.object({
   method: z.literal("ui/initialize"),
   params: z.object({
     /** @description App identification (name and version). */
-    appInfo: ImplementationSchema.describe(
+    appInfo: (ImplementationSchema as z.ZodType<Implementation>).describe(
       "App identification (name and version).",
     ),
     /** @description Features and capabilities this app provides. */
@@ -1033,7 +1049,7 @@ export const McpUiInitializeResultSchema = z
       .string()
       .describe('Negotiated protocol version string (e.g., "2025-11-21").'),
     /** @description Host application identification and version. */
-    hostInfo: ImplementationSchema.describe(
+    hostInfo: (ImplementationSchema as z.ZodType<Implementation>).describe(
       "Host application identification and version.",
     ),
     /** @description Features and capabilities provided by the host. */

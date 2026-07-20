@@ -1,12 +1,10 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import {
-  InMemoryTransport,
-  Server,
-  type JSONRPCMessage,
-} from "@modelcontextprotocol/server";
+import { InMemoryTransport } from "@modelcontextprotocol/client";
 import { z } from "zod/v4";
 
 import { App } from "./app";
+import { Protocol } from "./protocol";
+import type { JSONRPCMessage } from "./mcp-types";
 import {
   LATEST_PROTOCOL_VERSION,
   McpUiInitializeRequestSchema,
@@ -14,11 +12,9 @@ import {
   McpUiInitializedNotificationSchema,
 } from "./types";
 
-const INNER_MCP_PROTOCOL_VERSION = "2025-11-25";
-
 type ConnectedPair = {
   app: App;
-  server: Server;
+  server: Protocol;
   sentByApp: JSONRPCMessage[];
   appsInitialized: Promise<void>;
 };
@@ -30,13 +26,7 @@ async function connectPair(
     { autoResize: false },
   ),
 ): Promise<ConnectedPair> {
-  const server = new Server(
-    { name: "inner-mcp-server", version: "0.0.0" },
-    {
-      capabilities: { resources: {}, tools: {} },
-      supportedProtocolVersions: [INNER_MCP_PROTOCOL_VERSION],
-    },
-  );
+  const server = new Protocol();
   const [appTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const sentByApp: JSONRPCMessage[] = [];
   const send = appTransport.send.bind(appTransport);
@@ -103,8 +93,8 @@ afterEach(async () => {
   );
 });
 
-describe("App base MCP SDK v2 Client migration", () => {
-  it("completes the legacy MCP handshake before the authoritative Apps handshake", async () => {
+describe("App protocol-neutral core migration", () => {
+  it("uses only the authoritative Apps handshake", async () => {
     const pair = await connectPair();
     connected.push(pair);
 
@@ -124,24 +114,15 @@ describe("App base MCP SDK v2 Client migration", () => {
       );
 
     expect(lifecycleMethods).toEqual([
-      "initialize",
-      "notifications/initialized",
       "ui/initialize",
       "ui/notifications/initialized",
     ]);
-    expect(pair.app.getNegotiatedProtocolVersion()).toBe(
-      INNER_MCP_PROTOCOL_VERSION,
-    );
   });
 
   it("uses ui/initialize as the authority for Apps host state", async () => {
     const pair = await connectPair();
     connected.push(pair);
 
-    expect(pair.app.getServerVersion()).toEqual({
-      name: "inner-mcp-server",
-      version: "0.0.0",
-    });
     expect(pair.app.getHostVersion()).toEqual({
       name: "apps-host",
       version: "2.0.0",
@@ -219,9 +200,6 @@ describe("App base MCP SDK v2 Client migration", () => {
     const second = await connectPair(first.app);
     connected.push(second);
 
-    expect(second.app.getNegotiatedProtocolVersion()).toBe(
-      INNER_MCP_PROTOCOL_VERSION,
-    );
     expect(second.app.getHostVersion()).toEqual({
       name: "apps-host",
       version: "2.0.0",
