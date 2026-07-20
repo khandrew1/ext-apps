@@ -22,6 +22,7 @@ import {
   type Transport,
 } from "@modelcontextprotocol/client";
 import { EmptyResultSchema } from "@modelcontextprotocol/core";
+export { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from "./constants";
 import { EventDispatcher } from "./events";
 export { EventDispatcher } from "./events";
 import { PostMessageTransport } from "./message-transport";
@@ -158,7 +159,6 @@ export {
  * }
  * ```
  */
-export const RESOURCE_URI_META_KEY = "ui/resourceUri";
 
 /**
  * MIME type for MCP UI resources.
@@ -167,7 +167,6 @@ export const RESOURCE_URI_META_KEY = "ui/resourceUri";
  *
  * Used by {@link server-helpers!registerAppResource `registerAppResource`} as the default MIME type for app resources.
  */
-export const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 
 /**
  * Options for configuring {@link App `App`} behavior.

@@ -1,6 +1,9 @@
 #!/usr/bin/env bun
 import { $ } from "bun";
-import { cpSync, mkdirSync } from "node:fs";
+import { cpSync, mkdirSync, rmSync } from "node:fs";
+
+// Avoid publishing artifacts left behind by an earlier build or branch.
+rmSync("dist", { recursive: true, force: true });
 
 // Run TypeScript compiler for type declarations
 await $`tsc`;

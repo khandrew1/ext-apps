@@ -54,6 +54,7 @@
     "prepack": "npm run build",
     "build:all": "npm run examples:build",
     "test": "bun test src examples",
+    "test:dependency-isolation": "npm run build && node scripts/check-dependency-isolation.mjs",
     "test:e2e": "playwright test",
     "test:e2e:update": "playwright test --update-snapshots",
     "test:e2e:ui": "playwright test --ui",
@@ -118,6 +119,12 @@
     "zod": "^4.2.0"
   },
   "peerDependenciesMeta": {
+    "@modelcontextprotocol/client": {
+      "optional": true
+    },
+    "@modelcontextprotocol/server": {
+      "optional": true
+    },
     "react": {
       "optional": true
     },

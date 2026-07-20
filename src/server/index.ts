@@ -32,13 +32,12 @@
  */
 
 import {
-  RESOURCE_URI_META_KEY,
-  RESOURCE_MIME_TYPE,
   McpUiResourceCsp,
   McpUiResourceMeta,
   McpUiToolMeta,
   McpUiClientCapabilities,
-} from "../app.js";
+} from "../spec.types.js";
+import { RESOURCE_URI_META_KEY, RESOURCE_MIME_TYPE } from "../constants.js";
 import type {
   ClientCapabilities,
   McpServer,

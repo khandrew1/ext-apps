@@ -89,8 +89,8 @@ import {
   McpUiToolMeta,
 } from "./types";
 export * from "./types";
-export { RESOURCE_URI_META_KEY, RESOURCE_MIME_TYPE } from "./app";
-import { RESOURCE_URI_META_KEY } from "./app";
+export { RESOURCE_URI_META_KEY, RESOURCE_MIME_TYPE } from "./constants";
+import { RESOURCE_URI_META_KEY } from "./constants";
 export { PostMessageTransport } from "./message-transport";
 
 /**
