@@ -241,11 +241,11 @@ export type AppBridgeEventMap = {
 /**
  * Host-side bridge for communicating with a single View ({@link app!App `App`}).
  *
- * `AppBridge` extends the base MCP SDK's public `Server` class and acts as a proxy between
- * the host application and a view running in an iframe. When an MCP client
- * is provided to the constructor, it automatically forwards MCP server capabilities
- * (tools, resources, prompts) to the view. It also handles the initialization
- * handshake.
+ * `AppBridge` extends the base MCP SDK's public `Protocol` class and acts as a
+ * proxy between the host application and a view running in an iframe. When a
+ * separate MCP client is provided to the constructor, it automatically forwards
+ * MCP server capabilities (tools, resources, prompts) to the view. It also
+ * handles the Apps initialization handshake.
  *
  * ## Architecture
  *

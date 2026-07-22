@@ -297,7 +297,8 @@ export type AppEventMap = {
  *
  * The `App` class provides a framework-agnostic way to build interactive MCP Apps
  * that run inside host applications. It extends the base MCP SDK's public
- * `Client` class and adds the Apps handshake, lifecycle, and high-level APIs.
+ * `Protocol` class, composes an {@link EventDispatcher}, and adds the Apps
+ * handshake, lifecycle, and high-level APIs.
  *
  * ## Architecture
  *
@@ -314,9 +315,11 @@ export type AppEventMap = {
  *
  * ## Protocol and event methods
  *
- * As a subclass of the base MCP SDK's `Client`, `App` provides:
+ * From the base MCP SDK's `Protocol`, `App` provides:
  * - `setRequestHandler()` - Register handlers for requests from host
  * - `setNotificationHandler()` - Register handlers for notifications from host
+ *
+ * From its composed {@link EventDispatcher}, `App` also provides:
  * - `addEventListener()` - Append a listener for a notification event (multi-listener)
  * - `removeEventListener()` - Remove a previously added listener
  *

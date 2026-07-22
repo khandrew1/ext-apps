@@ -56,11 +56,11 @@ flowchart LR
 - **Host** — The chat client (e.g., Claude Desktop) that connects to servers, embeds Views in iframes, and proxies communication between them.
 - **View** — The UI running inside a sandboxed iframe. It receives tool data from the Host and can call server tools or send messages back to the chat.
 
-The View's `App` subclasses the base MCP SDK `Client`. The Host's `AppBridge`
-subclasses the base MCP SDK `Server` for the inner iframe channel, while a
-separate outer `Client` connects the Host to the actual MCP Server. Keeping
-those two connections separate prevents iframe negotiation and capabilities
-from leaking into the server connection.
+The View's `App` and the Host's `AppBridge` both subclass the base MCP SDK's
+public `Protocol` for the iframe channel. A separate outer `Client` connects
+the Host to the actual MCP Server. Keeping those two connections separate
+preserves the Apps-only iframe handshake and prevents iframe capabilities from
+leaking into the server connection.
 
 ## Lifecycle
 
