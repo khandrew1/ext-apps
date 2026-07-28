@@ -5384,26 +5384,52 @@
             "_meta": {
               "type": "object",
               "properties": {
-                "progressToken": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "integer",
-                      "minimum": -9007199254740991,
-                      "maximum": 9007199254740991
-                    }
-                  ]
-                },
-                "io.modelcontextprotocol/related-task": {
+                "io.modelcontextprotocol/serverInfo": {
                   "type": "object",
                   "properties": {
-                    "taskId": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "icons": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "src": {
+                            "type": "string"
+                          },
+                          "mimeType": {
+                            "type": "string"
+                          },
+                          "sizes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "theme": {
+                            "type": "string",
+                            "enum": ["light", "dark"]
+                          }
+                        },
+                        "required": ["src"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "websiteUrl": {
+                      "type": "string"
+                    },
+                    "description": {
                       "type": "string"
                     }
                   },
-                  "required": ["taskId"],
+                  "required": ["name", "version"],
                   "additionalProperties": false
                 }
               },

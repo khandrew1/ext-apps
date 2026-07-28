@@ -1,7 +1,7 @@
 import {
-  Client,
-  type ClientContext,
-  type ClientOptions,
+  Protocol,
+  type BaseContext,
+  type ProtocolOptions,
   type RequestOptions,
   type CallToolRequest,
   type CallToolResult,
@@ -22,6 +22,7 @@ import {
   type Transport,
 } from "@modelcontextprotocol/client";
 import { EmptyResultSchema } from "@modelcontextprotocol/core";
+export { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from "./constants";
 import { EventDispatcher } from "./events";
 export { EventDispatcher } from "./events";
 import { PostMessageTransport } from "./message-transport";
@@ -70,8 +71,6 @@ type MethodSchema = ZodObject<{
   method: ZodLiteral<string>;
   params: ZodType;
 }>;
-
-const INNER_MCP_PROTOCOL_VERSION = "2025-11-25";
 
 function mergeAppCapabilities(
   base: McpUiAppCapabilities,
@@ -160,7 +159,6 @@ export {
  * }
  * ```
  */
-export const RESOURCE_URI_META_KEY = "ui/resourceUri";
 
 /**
  * MIME type for MCP UI resources.
@@ -169,19 +167,15 @@ export const RESOURCE_URI_META_KEY = "ui/resourceUri";
  *
  * Used by {@link server-helpers!registerAppResource `registerAppResource`} as the default MIME type for app resources.
  */
-export const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 
 /**
  * Options for configuring {@link App `App`} behavior.
  *
- * Extends `ClientOptions` from the base MCP SDK with `App`-specific configuration.
+ * Extends `ProtocolOptions` from the base MCP SDK with `App`-specific configuration.
  *
- * @see `ClientOptions` from @modelcontextprotocol/client for inherited options
+ * @see `ProtocolOptions` from @modelcontextprotocol/client for inherited options
  */
-export type AppOptions = Omit<
-  ClientOptions,
-  "capabilities" | "supportedProtocolVersions" | "versionNegotiation"
-> & {
+export type AppOptions = Omit<ProtocolOptions, "supportedProtocolVersions"> & {
   /**
    * Automatically report size changes to the host using `ResizeObserver`.
    *
@@ -221,7 +215,7 @@ export type AppOptions = Omit<
   allowUnsafeEval?: boolean;
 };
 
-type RequestHandlerExtra = ClientContext;
+type RequestHandlerExtra = BaseContext;
 
 /**
  * Result of an app-registered tool callback. When `Out` is provided,
@@ -303,7 +297,8 @@ export type AppEventMap = {
  *
  * The `App` class provides a framework-agnostic way to build interactive MCP Apps
  * that run inside host applications. It extends the base MCP SDK's public
- * `Client` class and adds the Apps handshake, lifecycle, and high-level APIs.
+ * `Protocol` class, composes an {@link EventDispatcher}, and adds the Apps
+ * handshake, lifecycle, and high-level APIs.
  *
  * ## Architecture
  *
@@ -320,9 +315,11 @@ export type AppEventMap = {
  *
  * ## Protocol and event methods
  *
- * As a subclass of the base MCP SDK's `Client`, `App` provides:
+ * From the base MCP SDK's `Protocol`, `App` provides:
  * - `setRequestHandler()` - Register handlers for requests from host
  * - `setNotificationHandler()` - Register handlers for notifications from host
+ *
+ * From its composed {@link EventDispatcher}, `App` also provides:
  * - `addEventListener()` - Append a listener for a notification event (multi-listener)
  * - `removeEventListener()` - Remove a previously added listener
  *
@@ -354,7 +351,7 @@ export type AppEventMap = {
  * await app.connect();
  * ```
  */
-export class App extends Client {
+export class App extends Protocol<BaseContext> {
   private _hostCapabilities?: McpUiHostCapabilities;
   private _hostInfo?: Implementation;
   private _hostContext?: McpUiHostContext;
@@ -521,20 +518,7 @@ export class App extends Client {
     private _appCapabilities: McpUiAppCapabilities = {},
     private options: AppOptions = { autoResize: true },
   ) {
-    // TEMPORARY INNER-CHANNEL NEGOTIATION:
-    // App and AppBridge use the public v2 Client/Server roles, so the iframe
-    // channel first completes the SDK's standard legacy MCP initialization.
-    // ui/initialize remains authoritative for Apps capabilities, identity, and
-    // host context, and ui/notifications/initialized remains the View-ready gate.
-    // Keep the inner MCP era pinned to 2025-11-25. Revisit this sequence only
-    // after the MCP Apps negotiation specification is resolved:
-    // https://github.com/modelcontextprotocol/ext-apps/issues/708
-    super(_appInfo, {
-      ...options,
-      capabilities: {},
-      versionNegotiation: { mode: "legacy" },
-      supportedProtocolVersions: [INNER_MCP_PROTOCOL_VERSION],
-    });
+    super(options);
 
     if (!options.allowUnsafeEval) {
       z.config({ jitless: true });
@@ -548,6 +532,11 @@ export class App extends Client {
     // Eagerly register hostcontextchanged so the owner-side context merge runs
     // even if the user never assigns a handler or adds a listener.
     this.setEventHandler("hostcontextchanged", undefined);
+  }
+
+  /** @internal */
+  protected buildContext(ctx: BaseContext): BaseContext {
+    return ctx;
   }
 
   private registerAppCapabilities(capabilities: McpUiAppCapabilities): void {
@@ -1992,15 +1981,10 @@ export class App extends Client {
     }
     this._initializedSent = false;
 
-    // TEMPORARY INNER-CHANNEL NEGOTIATION:
-    // App and AppBridge use the public v2 Client/Server roles, so the iframe
-    // channel first completes the SDK's standard legacy MCP initialization.
-    // ui/initialize remains authoritative for Apps capabilities, identity, and
-    // host context, and ui/notifications/initialized remains the View-ready gate.
-    // Keep the inner MCP era pinned to 2025-11-25. Revisit this sequence only
-    // after the MCP Apps negotiation specification is resolved:
-    // https://github.com/modelcontextprotocol/ext-apps/issues/708
     try {
+      // Protocol.connect only wires the transport — no MCP handshake. The
+      // ui/initialize request below is the sole negotiation on this channel,
+      // matching the v1 wire behavior deployed hosts expect.
       await super.connect(transport);
 
       const result = await this.request(

@@ -121,17 +121,27 @@ resources:
 
 ## Getting Started
 
+For a View or host:
+
 ```bash
 npm install -S @modelcontextprotocol/ext-apps \
-  @modelcontextprotocol/client@2.0.0-beta.4 \
-  @modelcontextprotocol/server@2.0.0-beta.4 \
-  @modelcontextprotocol/core@2.0.0-beta.4 \
+  @modelcontextprotocol/client@2.0.0-beta.5 \
+  @modelcontextprotocol/core@2.0.0-beta.5 \
   zod@^4.2.0
 ```
 
-This release uses the split base MCP SDK v2 packages. Install all three at the
-exact published beta.4 version so the Apps SDK and your MCP client/server share
-one compatible protocol implementation.
+For an MCP server:
+
+```bash
+npm install -S @modelcontextprotocol/ext-apps \
+  @modelcontextprotocol/server@2.0.0-beta.5 \
+  @modelcontextprotocol/core@2.0.0-beta.5 \
+  zod@^4.2.0
+```
+
+Applications that implement both roles should install both `client` and
+`server`. Keep all installed base MCP SDK packages on the exact same published
+beta so they share one compatible protocol implementation.
 
 **New here?** Start with the
 [Quickstart Guide](https://apps.extensions.modelcontextprotocol.io/api/documents/Quickstart.html)

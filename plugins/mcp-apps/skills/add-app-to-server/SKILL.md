@@ -77,7 +77,7 @@ Before writing any code, analyze the server's existing tools and determine which
 ## Step 2: Add Dependencies
 
 ```bash
-npm install @modelcontextprotocol/ext-apps @modelcontextprotocol/client@2.0.0-beta.4 @modelcontextprotocol/core@2.0.0-beta.4 @modelcontextprotocol/server@2.0.0-beta.4 zod@^4.2.0
+npm install @modelcontextprotocol/ext-apps @modelcontextprotocol/client@2.0.0-beta.5 @modelcontextprotocol/core@2.0.0-beta.5 @modelcontextprotocol/server@2.0.0-beta.5 zod@^4.2.0
 npm install -D vite vite-plugin-singlefile
 ```
 
